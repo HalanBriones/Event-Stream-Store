@@ -22,6 +22,13 @@ export const api = {
         400: errorSchemas.validation,
       },
     },
+    list: {
+      method: 'GET' as const,
+      path: '/api/events' as const,
+      responses: {
+        200: z.array(z.custom<typeof events.$inferSelect>()),
+      },
+    },
   },
 };
 
@@ -39,3 +46,4 @@ export function buildUrl(path: string, params?: Record<string, string | number>)
 
 export type CreateEventInput = z.infer<typeof api.events.create.input>;
 export type EventResponse = z.infer<typeof api.events.create.responses[201]>;
+export type EventsListResponse = z.infer<typeof api.events.list.responses[200]>;

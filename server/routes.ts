@@ -24,5 +24,14 @@ export async function registerRoutes(
     }
   });
 
+  app.get(api.events.list.path, async (req, res) => {
+    try {
+      const events = await storage.getEvents();
+      res.json(events);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch events" });
+    }
+  });
+
   return httpServer;
 }
