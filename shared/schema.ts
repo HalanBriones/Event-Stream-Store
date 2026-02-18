@@ -2,9 +2,19 @@ import { pgTable, text, serial, integer, timestamp, jsonb } from "drizzle-orm/pg
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const eventTypes = [
+  "course enrollment",
+  "course ended",
+  "lesson started",
+  "lesson finished",
+  "quiz_started",
+  "quiz submitted",
+  "quiz_attempts",
+] as const;
+
 export const events = pgTable("events", {
   id: serial("id").primaryKey(),
-  eventType: text("event_type").notNull(),
+  eventType: text("event_type", { enum: eventTypes }).notNull(),
   userId: integer("user_id").notNull(),
   courseId: integer("course_id").notNull(),
   lessonId: integer("lesson_id"),

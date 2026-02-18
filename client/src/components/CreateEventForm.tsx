@@ -1,11 +1,13 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api, type CreateEventInput } from "@shared/routes";
+import { eventTypes } from "@shared/schema";
 import { useCreateEvent } from "@/hooks/use-events";
 import { Loader2, Send } from "lucide-react";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function CreateEventForm() {
   const { mutate: createEvent, isPending } = useCreateEvent();
@@ -13,20 +15,22 @@ export function CreateEventForm() {
   const form = useForm<CreateEventInput>({
     resolver: zodResolver(api.events.create.input),
     defaultValues: {
-      eventType: "lesson_completed",
-      userId: 1,
-      courseId: 101,
-      lessonId: 5,
+      eventType: "lesson started",
+      userId: 0,
+      courseId: 0,
+      lessonId: null,
       quizId: null,
-      metadata: {},
+      metadata: null,
     }
   });
 
   function onSubmit(data: CreateEventInput) {
     createEvent(data, {
       onSuccess: () => {
-        // Optional: Reset form or keep values for rapid testing
-        // form.reset(); 
+        form.reset({
+          ...form.getValues(),
+          metadata: null,
+        });
       }
     });
   }
@@ -36,7 +40,7 @@ export function CreateEventForm() {
       <div className="mb-8">
         <h2 className="text-2xl font-bold font-display text-foreground tracking-tight">Log New Event</h2>
         <p className="text-muted-foreground mt-2">
-          Test the event ingestion pipeline by manually submitting an event payload.
+          Fill in the details below to log a new event to the database.
         </p>
       </div>
 
@@ -49,9 +53,20 @@ export function CreateEventForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Event Type</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. lesson_viewed" {...field} />
-                  </FormControl>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select event type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {eventTypes.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          <span className="capitalize">{type}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -111,6 +126,25 @@ export function CreateEventForm() {
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="quizId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Quiz ID (Optional)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      {...field}
+                      value={field.value || ''}
+                      onChange={e => field.onChange(e.target.value ? e.target.valueAsNumber : null)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
 
           <FormField
@@ -118,19 +152,23 @@ export function CreateEventForm() {
             name="metadata"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Metadata (JSON)</FormLabel>
+                <FormLabel>Metadata (JSON - Optional)</FormLabel>
                 <FormControl>
                   <Textarea 
                     className="font-mono text-sm min-h-[100px]"
                     placeholder='{"browser": "chrome", "duration": 120}'
-                    value={typeof field.value === 'object' ? JSON.stringify(field.value, null, 2) : field.value}
+                    value={field.value ? (typeof field.value === 'object' ? JSON.stringify(field.value, null, 2) : field.value) : ''}
                     onChange={(e) => {
+                      const val = e.target.value;
+                      if (!val) {
+                        field.onChange(null);
+                        return;
+                      }
                       try {
-                        const parsed = JSON.parse(e.target.value);
+                        const parsed = JSON.parse(val);
                         field.onChange(parsed);
                       } catch {
-                        // Allow typing invalid JSON temporarily
-                        field.onChange(e.target.value); 
+                        field.onChange(val); 
                       }
                     }}
                   />
@@ -158,12 +196,12 @@ export function CreateEventForm() {
               {isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
+                  Saving...
                 </>
               ) : (
                 <>
                   <Send className="mr-2 h-4 w-4" />
-                  Send Event Payload
+                  Save Event
                 </>
               )}
             </button>
