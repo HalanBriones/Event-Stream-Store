@@ -1,5 +1,7 @@
 import { CreateEventForm } from "@/components/CreateEventForm";
-import { Activity, Database, Server } from "lucide-react";
+import { Activity, Database, Server, LayoutDashboard } from "lucide-react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 
 export default function Home() {
   return (
@@ -13,8 +15,14 @@ export default function Home() {
             </div>
             <span className="font-display font-bold text-lg tracking-tight">EventLog</span>
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard">
+              <Button variant="outline" size="sm" className="gap-2">
+                <LayoutDashboard className="h-4 w-4" />
+                View Dashboard
+              </Button>
+            </Link>
+            <div className="hidden md:flex items-center gap-1.5 text-sm text-muted-foreground">
               <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
               <span>System Online</span>
             </div>
