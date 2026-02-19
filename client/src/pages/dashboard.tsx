@@ -161,30 +161,36 @@ export default function Dashboard() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Student ID</TableHead>
-                  <TableHead>Activity Count</TableHead>
+                  <TableHead>Courses Enrolled</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {students.map((userId) => (
-                  <TableRow key={userId}>
-                    <TableCell className="font-medium">Student {userId}</TableCell>
-                    <TableCell>
-                      {events?.filter(e => e.userId === userId).length} events
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="gap-2"
-                        onClick={() => setSelectedStudent(userId)}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        View Details
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {students.map((userId) => {
+                  const enrolledCount = new Set(
+                    events?.filter(e => e.userId === userId && e.eventType === 'course enrollment')
+                      .map(e => e.courseId)
+                  ).size;
+                  return (
+                    <TableRow key={userId}>
+                      <TableCell className="font-medium">Student {userId}</TableCell>
+                      <TableCell>
+                        {enrolledCount} {enrolledCount === 1 ? 'course' : 'courses'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="gap-2"
+                          onClick={() => setSelectedStudent(userId)}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          View Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 {students.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
