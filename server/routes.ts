@@ -33,5 +33,14 @@ export async function registerRoutes(
     }
   });
 
+  app.get(api.events.studentStats.path, async (req, res) => {
+    try {
+      const stats = await storage.getStudentStats(Number(req.params.id));
+      res.json(stats);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch student stats" });
+    }
+  });
+
   return httpServer;
 }

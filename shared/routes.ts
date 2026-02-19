@@ -29,6 +29,20 @@ export const api = {
         200: z.array(z.custom<typeof events.$inferSelect>()),
       },
     },
+    studentStats: {
+      method: 'GET' as const,
+      path: '/api/students/:id/stats' as const,
+      responses: {
+        200: z.object({
+          enrolledCourses: z.number(),
+          completedCourses: z.number(),
+          courseCompletionTimes: z.array(z.object({
+            courseId: z.number(),
+            durationMinutes: z.number()
+          }))
+        }),
+      },
+    },
   },
 };
 
