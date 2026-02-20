@@ -80,7 +80,10 @@ function StudentDetail({ userId, onClose }: { userId: number; onClose: () => voi
   );
 }
 
+import { useLocation } from "wouter";
+
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
   const { data: events, isLoading: eventsLoading } = useQuery<any[]>({
     queryKey: [api.events.list.path],
@@ -182,7 +185,7 @@ export default function Dashboard() {
                         variant="outline" 
                         size="sm" 
                         className="gap-2"
-                        onClick={() => setSelectedStudent(student.userId)}
+                        onClick={() => setLocation(`/student/${student.userId}`)}
                       >
                         <ExternalLink className="h-4 w-4" />
                         View Details
@@ -201,13 +204,6 @@ export default function Dashboard() {
             </Table>
           </CardContent>
         </Card>
-
-        {selectedStudent && (
-          <StudentDetail 
-            userId={selectedStudent} 
-            onClose={() => setSelectedStudent(null)} 
-          />
-        )}
       </div>
     </div>
   );

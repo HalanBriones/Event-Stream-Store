@@ -46,9 +46,20 @@ export const api = {
         200: z.object({
           enrolledCourses: z.number(),
           completedCourses: z.number(),
-          courseCompletionTimes: z.array(z.object({
+          courses: z.array(z.object({
             courseId: z.number(),
-            durationMinutes: z.number()
+            isCompleted: z.boolean(),
+            durationMinutes: z.number().optional(),
+            lessons: z.array(z.object({
+              lessonId: z.number(),
+              isFinished: z.boolean(),
+              finishedAt: z.string().optional()
+            })),
+            quizzes: z.array(z.object({
+              quizId: z.number(),
+              isSubmitted: z.boolean(),
+              submittedAt: z.string().optional()
+            }))
           }))
         }),
       },
