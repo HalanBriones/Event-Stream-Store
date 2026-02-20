@@ -27,36 +27,38 @@ export class DatabaseStorage implements IStorage {
     const allEvents = await db.select().from(events);
     const studentMap = new Map<number, Set<number>>();
 
-    // First, identify all unique users from any event
+    // Identify all unique users from any event
     allEvents.forEach(e => {
       if (!studentMap.has(e.userId)) {
         studentMap.set(e.userId, new Set());
       }
     });
 
-    // Then, count distinct course_id where event_type = 'course enrollment'
+    // Count distinct course_id where event_type = 'course_enrollment'
     allEvents.forEach(e => {
-      if (e.eventType === 'course enrollment') {
+      if (e.eventType === 'course_enrollment') {
         studentMap.get(e.userId)!.add(e.courseId);
       }
     });
 
-    return Array.from(studentMap.entries()).map(([userId, enrolledSet]) => ({
-      userId,
-      enrolledCount: enrolledSet.size
-    }));
+    return Array.from(studentMap.entries())
+      .map(([userId, enrolledSet]) => ({
+        userId,
+        enrolledCount: enrolledSet.size
+      }))
+      .sort((a, b) => a.userId - b.userId);
   }
 
   async getStudentStats(userId: number) {
     const studentEvents = await db.select().from(events).where(eq(events.userId, userId));
     
-    const enrolled = new Set(studentEvents.filter(e => e.eventType === 'course enrollment').map(e => e.courseId));
-    const completed = studentEvents.filter(e => e.eventType === 'course ended');
+    const enrolled = new Set(studentEvents.filter(e => e.eventType === 'course_enrollment').map(e => e.courseId));
+    const completed = studentEvents.filter(e => e.eventType === 'course_ended');
     
     const completionTimes = completed.map(endEvent => {
       const startEvent = studentEvents.find(e => 
         e.courseId === endEvent.courseId && 
-        e.eventType === 'course enrollment'
+        e.eventType === 'course_enrollment'
       );
       if (startEvent) {
         const duration = Math.round((new Date(endEvent.timestamp).getTime() - new Date(startEvent.timestamp).getTime()) / (1000 * 60));

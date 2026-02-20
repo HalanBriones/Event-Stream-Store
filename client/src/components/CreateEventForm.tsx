@@ -15,7 +15,7 @@ export function CreateEventForm() {
   const form = useForm<CreateEventInput>({
     resolver: zodResolver(api.events.create.input),
     defaultValues: {
-      eventType: "lesson started",
+      eventType: "lesson_started",
       userId: 0,
       courseId: 0,
       lessonId: null,

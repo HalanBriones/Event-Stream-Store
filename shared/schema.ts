@@ -3,12 +3,12 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const eventTypes = [
-  "course enrollment",
-  "course ended",
-  "lesson started",
-  "lesson finished",
+  "course_enrollment",
+  "course_ended",
+  "lesson_started",
+  "lesson_finished",
   "quiz_started",
-  "quiz submitted",
+  "quiz_submitted",
   "quiz_attempts",
 ] as const;
 
