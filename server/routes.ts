@@ -33,6 +33,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get(api.events.students.path, async (req, res) => {
+    try {
+      const students = await storage.getStudentsWithStats();
+      res.json(students);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch students" });
+    }
+  });
+
   app.get(api.events.studentStats.path, async (req, res) => {
     try {
       const stats = await storage.getStudentStats(Number(req.params.id));

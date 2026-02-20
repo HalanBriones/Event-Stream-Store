@@ -82,13 +82,18 @@ function StudentDetail({ userId, onClose }: { userId: number; onClose: () => voi
 
 export default function Dashboard() {
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
-  const { data: events, isLoading } = useQuery<any[]>({
+  const { data: events, isLoading: eventsLoading } = useQuery<any[]>({
     queryKey: [api.events.list.path],
   });
 
-  const students = Array.from(new Set(events?.map(e => e.userId) || []));
+  const { data: students, isLoading: studentsLoading } = useQuery<any[]>({
+    queryKey: [api.events.students.path],
+  });
+
+  const isLoading = eventsLoading || studentsLoading;
+
   const totalEvents = events?.length || 0;
-  const uniqueUsers = students.length;
+  const uniqueUsers = students?.length || 0;
   const uniqueCourses = new Set(events?.map((e) => e.courseId)).size;
 
   if (isLoading) {
@@ -166,32 +171,26 @@ export default function Dashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {students.map((userId) => {
-                  const enrolledCount = new Set(
-                    events?.filter(e => e.userId === userId && e.eventType === 'course enrollment')
-                      .map(e => e.courseId)
-                  ).size;
-                  return (
-                    <TableRow key={userId}>
-                      <TableCell className="font-medium">Student {userId}</TableCell>
-                      <TableCell>
-                        {enrolledCount} {enrolledCount === 1 ? 'course' : 'courses'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="gap-2"
-                          onClick={() => setSelectedStudent(userId)}
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                          View Details
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {students.length === 0 && (
+                {students?.map((student) => (
+                  <TableRow key={student.userId}>
+                    <TableCell className="font-medium">Student {student.userId}</TableCell>
+                    <TableCell>
+                      {student.enrolledCount} {student.enrolledCount === 1 ? 'course' : 'courses'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="gap-2"
+                        onClick={() => setSelectedStudent(student.userId)}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        View Details
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {students?.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
                       No students found.

@@ -31,4 +31,7 @@ export const insertEventSchema = createInsertSchema(events).omit({
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 
-export type EventsListResponse = Event[];
+export type StudentWithStats = {
+  userId: number;
+  enrolledCount: number;
+};

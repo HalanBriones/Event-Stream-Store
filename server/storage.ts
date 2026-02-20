@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 export interface IStorage {
   createEvent(event: InsertEvent): Promise<Event>;
   getEvents(): Promise<Event[]>;
+  getStudentsWithStats(): Promise<{ userId: number; enrolledCount: number }[]>;
   getStudentStats(userId: number): Promise<{
     enrolledCourses: number;
     completedCourses: number;
@@ -20,6 +21,30 @@ export class DatabaseStorage implements IStorage {
 
   async getEvents(): Promise<Event[]> {
     return await db.select().from(events).orderBy(events.timestamp);
+  }
+
+  async getStudentsWithStats(): Promise<{ userId: number; enrolledCount: number }[]> {
+    const allEvents = await db.select().from(events);
+    const studentMap = new Map<number, Set<number>>();
+
+    // First, identify all unique users from any event
+    allEvents.forEach(e => {
+      if (!studentMap.has(e.userId)) {
+        studentMap.set(e.userId, new Set());
+      }
+    });
+
+    // Then, count distinct course_id where event_type = 'course enrollment'
+    allEvents.forEach(e => {
+      if (e.eventType === 'course enrollment') {
+        studentMap.get(e.userId)!.add(e.courseId);
+      }
+    });
+
+    return Array.from(studentMap.entries()).map(([userId, enrolledSet]) => ({
+      userId,
+      enrolledCount: enrolledSet.size
+    }));
   }
 
   async getStudentStats(userId: number) {
