@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, GraduationCap } from "lucide-react";
+import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 export default function StudentDetailsPage() {
@@ -69,7 +69,7 @@ export default function StudentDetailsPage() {
                   <div className="flex items-center justify-between w-full pr-4">
                     <div className="flex items-center gap-3">
                       <div className={`p-2 rounded-full ${course.isCompleted ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                        {course.isCompleted ? <GraduationCap className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+                        {course.isCompleted ? <CheckCircle2 className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
                       </div>
                       <div className="text-left">
                         <div className="font-bold">Course {course.courseId}</div>
@@ -81,68 +81,74 @@ export default function StudentDetailsPage() {
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pt-4 pb-6">
-                  <div className="space-y-8">
-                    {course.lessons.map((lesson: any) => (
-                      <div key={lesson.lessonId} className="border rounded-lg p-4 space-y-4 bg-muted/30">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-semibold text-lg flex items-center gap-2">
-                            Lesson {lesson.lessonId}
-                            {lesson.isFinished ? (
-                              <CheckCircle2 className="h-5 w-5 text-green-600" />
-                            ) : (
-                              <Circle className="h-5 w-5 text-muted-foreground" />
-                            )}
-                          </h3>
-                          {lesson.isFinished && (
-                            <div className="text-sm text-muted-foreground text-right">
-                              <div>Finished: {format(new Date(lesson.finishedAt), "MMM d, yyyy HH:mm")}</div>
-                              <div className="font-medium text-primary">Time to finish: {lesson.durationMinutes || 0} mins</div>
-                            </div>
-                          )}
-                        </div>
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="text-sm font-medium mb-3 uppercase tracking-wider text-muted-foreground">Lessons</h4>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Lesson ID</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Finished At</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {course.lessons.map((lesson: any) => (
+                            <TableRow key={lesson.lessonId}>
+                              <TableCell className="font-medium">Lesson {lesson.lessonId}</TableCell>
+                              <TableCell>
+                                {lesson.isFinished ? (
+                                  <span className="flex items-center gap-1.5 text-green-600">
+                                    <CheckCircle2 className="h-4 w-4" /> Finished
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    <Circle className="h-4 w-4" /> Not Finished
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {lesson.finishedAt ? format(new Date(lesson.finishedAt), "MMM d, yyyy HH:mm") : '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
 
-                        {lesson.quizzes.length > 0 && (
-                          <div className="pl-6 space-y-2">
-                            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Lesson Quizzes</h4>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Quiz ID</TableHead>
-                                  <TableHead>Status</TableHead>
-                                  <TableHead>Submitted At</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {lesson.quizzes.map((quiz: any) => (
-                                  <TableRow key={quiz.quizId}>
-                                    <TableCell className="font-medium">Quiz {quiz.quizId}</TableCell>
-                                    <TableCell>
-                                      {quiz.isSubmitted ? (
-                                        <span className="flex items-center gap-1.5 text-green-600">
-                                          <CheckCircle2 className="h-4 w-4" /> Submitted
-                                        </span>
-                                      ) : (
-                                        <span className="flex items-center gap-1.5 text-muted-foreground">
-                                          <Circle className="h-4 w-4" /> Pending
-                                        </span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground">
-                                      {quiz.submittedAt ? format(new Date(quiz.submittedAt), "MMM d, yyyy HH:mm") : '-'}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {course.lessons.length === 0 && (
-                      <div className="text-center py-8 text-muted-foreground">
-                        No lessons started for this course.
-                      </div>
-                    )}
+                    <div>
+                      <h4 className="text-sm font-medium mb-3 uppercase tracking-wider text-muted-foreground">Quizzes</h4>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Quiz ID</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Submitted At</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {course.quizzes.map((quiz: any) => (
+                            <TableRow key={quiz.quizId}>
+                              <TableCell className="font-medium">Quiz {quiz.quizId}</TableCell>
+                              <TableCell>
+                                {quiz.isSubmitted ? (
+                                  <span className="flex items-center gap-1.5 text-green-600">
+                                    <CheckCircle2 className="h-4 w-4" /> Submitted
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    <Circle className="h-4 w-4" /> Not Submitted
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {quiz.submittedAt ? format(new Date(quiz.submittedAt), "MMM d, yyyy HH:mm") : '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 </AccordionContent>
               </AccordionItem>

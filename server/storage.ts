@@ -60,42 +60,34 @@ export class DatabaseStorage implements IStorage {
       const completionEvent = courseEvents.find(e => e.eventType === 'course_ended');
       
       const lessons = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))).map(lessonId => {
-        const startEvent = courseEvents.find(e => e.lessonId === lessonId && e.eventType === 'lesson_started');
         const finishEvent = courseEvents.find(e => e.lessonId === lessonId && e.eventType === 'lesson_finished');
-        
-        let durationMinutes: number | undefined;
-        if (startEvent && finishEvent) {
-          durationMinutes = Math.round((finishEvent.timestamp.getTime() - startEvent.timestamp.getTime()) / (1000 * 60));
-        }
-
-        const lessonQuizzes = courseEvents
-          .filter(e => e.lessonId === lessonId && e.quizId)
-          .reduce((acc, e) => {
-            if (!acc.find(q => q.quizId === e.quizId)) {
-              const submitEvent = courseEvents.find(sq => sq.quizId === e.quizId && sq.eventType === 'quiz_submitted');
-              acc.push({
-                quizId: e.quizId!,
-                isSubmitted: !!submitEvent,
-                submittedAt: submitEvent?.timestamp.toISOString()
-              });
-            }
-            return acc;
-          }, [] as { quizId: number; isSubmitted: boolean; submittedAt?: string }[]);
-
         return {
           lessonId,
           isFinished: !!finishEvent,
-          finishedAt: finishEvent?.timestamp.toISOString(),
-          durationMinutes,
-          quizzes: lessonQuizzes
+          finishedAt: finishEvent?.timestamp.toISOString()
         };
       });
+
+      const quizzes = Array.from(new Set(courseEvents.filter(e => e.quizId).map(e => e.quizId!))).map(quizId => {
+        const submitEvent = courseEvents.find(e => e.quizId === quizId && e.eventType === 'quiz_submitted');
+        return {
+          quizId,
+          isSubmitted: !!submitEvent,
+          submittedAt: submitEvent?.timestamp.toISOString()
+        };
+      });
+
+      let durationMinutes: number | undefined;
+      if (enrollmentEvent && completionEvent) {
+        durationMinutes = Math.round((completionEvent.timestamp.getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60));
+      }
 
       return {
         courseId,
         isCompleted: !!completionEvent,
         durationMinutes,
-        lessons
+        lessons,
+        quizzes
       };
     });
 

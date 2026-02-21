@@ -53,14 +53,13 @@ export const api = {
             lessons: z.array(z.object({
               lessonId: z.number(),
               isFinished: z.boolean(),
-              finishedAt: z.string().optional(),
-              durationMinutes: z.number().optional(),
-              quizzes: z.array(z.object({
-                quizId: z.number(),
-                isSubmitted: z.boolean(),
-                submittedAt: z.string().optional()
-              }))
+              finishedAt: z.string().optional()
             })),
+            quizzes: z.array(z.object({
+              quizId: z.number(),
+              isSubmitted: z.boolean(),
+              submittedAt: z.string().optional()
+            }))
           }))
         }),
       },
