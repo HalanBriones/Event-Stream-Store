@@ -61,14 +61,24 @@ export class DatabaseStorage implements IStorage {
       
       const lessons = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))).map(lessonId => {
         const finishEvent = courseEvents.find(e => e.lessonId === lessonId && e.eventType === 'lesson_finished');
+        const lessonQuizzes = Array.from(new Set(courseEvents.filter(e => e.lessonId === lessonId && e.quizId).map(e => e.quizId!))).map(quizId => {
+          const submitEvent = courseEvents.find(e => e.quizId === quizId && e.eventType === 'quiz_submitted');
+          return {
+            quizId,
+            isSubmitted: !!submitEvent,
+            submittedAt: submitEvent?.timestamp.toISOString()
+          };
+        });
+        
         return {
           lessonId,
           isFinished: !!finishEvent,
-          finishedAt: finishEvent?.timestamp.toISOString()
+          finishedAt: finishEvent?.timestamp.toISOString(),
+          quizzes: lessonQuizzes
         };
       });
 
-      const quizzes = Array.from(new Set(courseEvents.filter(e => e.quizId).map(e => e.quizId!))).map(quizId => {
+      const orphanQuizzes = Array.from(new Set(courseEvents.filter(e => !e.lessonId && e.quizId).map(e => e.quizId!))).map(quizId => {
         const submitEvent = courseEvents.find(e => e.quizId === quizId && e.eventType === 'quiz_submitted');
         return {
           quizId,
@@ -87,7 +97,7 @@ export class DatabaseStorage implements IStorage {
         isCompleted: !!completionEvent,
         durationMinutes,
         lessons,
-        quizzes
+        quizzes: orphanQuizzes
       };
     });
 

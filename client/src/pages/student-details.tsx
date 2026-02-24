@@ -138,9 +138,48 @@ export default function StudentDetailsPage() {
                         )}
                       </div>
                     ))}
-                    {course.lessons?.length === 0 && (
+                    {course.lessons?.length === 0 && course.quizzes?.length === 0 && (
                       <div className="text-center py-8 text-muted-foreground">
-                        No lessons started for this course.
+                        No progress recorded for this course.
+                      </div>
+                    )}
+                    {course.quizzes?.length > 0 && (
+                      <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+                        <h3 className="font-semibold text-lg flex items-center gap-2 text-muted-foreground">
+                          General Quizzes
+                        </h3>
+                        <div className="pl-6">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Quiz ID</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Submitted At</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {course.quizzes.map((quiz: any) => (
+                                <TableRow key={quiz.quizId}>
+                                  <TableCell className="font-medium">Quiz {quiz.quizId}</TableCell>
+                                  <TableCell>
+                                    {quiz.isSubmitted ? (
+                                      <span className="flex items-center gap-1.5 text-green-600">
+                                        <CheckCircle2 className="h-4 w-4" /> Submitted
+                                      </span>
+                                    ) : (
+                                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                                        <Circle className="h-4 w-4" /> Pending
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-muted-foreground">
+                                    {quiz.submittedAt ? format(new Date(quiz.submittedAt), "MMM d, yyyy HH:mm") : '-'}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
                       </div>
                     )}
                   </div>
