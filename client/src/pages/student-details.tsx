@@ -82,7 +82,7 @@ export default function StudentDetailsPage() {
                 </AccordionTrigger>
                 <AccordionContent className="pt-4 pb-6">
                   <div className="space-y-8">
-                    {course.lessons.map((lesson: any) => (
+                    {course.lessons?.map((lesson: any) => (
                       <div key={lesson.lessonId} className="border rounded-lg p-4 space-y-4 bg-muted/30">
                         <div className="flex items-center justify-between">
                           <h3 className="font-semibold text-lg flex items-center gap-2">
@@ -101,7 +101,7 @@ export default function StudentDetailsPage() {
                           )}
                         </div>
 
-                        {lesson.quizzes.length > 0 && (
+                        {lesson.quizzes?.length > 0 && (
                           <div className="pl-6 space-y-2">
                             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Lesson Quizzes</h4>
                             <Table>
@@ -113,7 +113,7 @@ export default function StudentDetailsPage() {
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {lesson.quizzes.map((quiz: any) => (
+                                {lesson.quizzes?.map((quiz: any) => (
                                   <TableRow key={quiz.quizId}>
                                     <TableCell className="font-medium">Quiz {quiz.quizId}</TableCell>
                                     <TableCell>
@@ -138,7 +138,7 @@ export default function StudentDetailsPage() {
                         )}
                       </div>
                     ))}
-                    {course.lessons.length === 0 && (
+                    {course.lessons?.length === 0 && (
                       <div className="text-center py-8 text-muted-foreground">
                         No lessons started for this course.
                       </div>
