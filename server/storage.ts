@@ -60,20 +60,44 @@ export class DatabaseStorage implements IStorage {
       const completionEvent = courseEvents.find(e => e.eventType === 'course_ended');
       
       const lessons = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))).map(lessonId => {
+        const startEvent = courseEvents.find(e => e.lessonId === lessonId && e.eventType === 'lesson_started');
         const finishEvent = courseEvents.find(e => e.lessonId === lessonId && e.eventType === 'lesson_finished');
+        
         const lessonQuizzes = Array.from(new Set(courseEvents.filter(e => e.lessonId === lessonId && e.quizId).map(e => e.quizId!))).map(quizId => {
+          const quizStartEvent = courseEvents.find(e => e.quizId === quizId && e.eventType === 'quiz_started');
           const submitEvent = courseEvents.find(e => e.quizId === quizId && e.eventType === 'quiz_submitted');
           return {
             quizId,
             isSubmitted: !!submitEvent,
-            submittedAt: submitEvent?.timestamp.toISOString()
+            submittedAt: submitEvent?.timestamp.toISOString(),
+            durationMinutes: (quizStartEvent && submitEvent) 
+              ? Math.round((submitEvent.timestamp.getTime() - quizStartEvent.timestamp.getTime()) / (1000 * 60))
+              : undefined
           };
         });
+
+        // Calculate lesson duration: from lesson_started to the last quiz_submitted or lesson_finished
+        let durationMinutes: number | undefined;
+        if (startEvent) {
+          const endTimestamp = finishEvent?.timestamp 
+            || lessonQuizzes.reduce((latest, q) => {
+                 if (q.submittedAt) {
+                   const d = new Date(q.submittedAt);
+                   return (!latest || d > latest) ? d : latest;
+                 }
+                 return latest;
+               }, null as Date | null);
+
+          if (endTimestamp) {
+            durationMinutes = Math.round((endTimestamp.getTime() - startEvent.timestamp.getTime()) / (1000 * 60));
+          }
+        }
         
         return {
           lessonId,
-          isFinished: !!finishEvent,
-          finishedAt: finishEvent?.timestamp.toISOString(),
+          isFinished: !!finishEvent || lessonQuizzes.some(q => q.isSubmitted),
+          finishedAt: finishEvent?.timestamp.toISOString() || lessonQuizzes.sort((a,b) => (b.submittedAt?.localeCompare(a.submittedAt || '') || 0))[0]?.submittedAt,
+          durationMinutes,
           quizzes: lessonQuizzes
         };
       });
