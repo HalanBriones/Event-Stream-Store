@@ -89,11 +89,12 @@ export class DatabaseStorage implements IStorage {
                }, null as Date | null);
 
           if (endTimestamp) {
-            // Calculate difference in days
-            const diffTime = endTimestamp.getTime() - startEvent.timestamp.getTime();
-            durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            // Ensure at least 1 day if it started and finished
-            if (durationDays === 0) durationDays = 1;
+            // Calculate difference in days (end - start)
+            const startDate = new Date(startEvent.timestamp.getFullYear(), startEvent.timestamp.getMonth(), startEvent.timestamp.getDate());
+            const endDate = new Date(endTimestamp.getFullYear(), endTimestamp.getMonth(), endTimestamp.getDate());
+            const diffTime = endDate.getTime() - startDate.getTime();
+            durationDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            // If it's the same day, we'll show 0 or 1 based on preference, but usually "days to finish" implies calendar day difference
           }
         }
         
