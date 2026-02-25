@@ -77,7 +77,7 @@ export class DatabaseStorage implements IStorage {
         });
 
         // Calculate lesson duration: from lesson_started to the last quiz_submitted or lesson_finished
-        let durationMinutes: number | undefined;
+        let durationDays: number | undefined;
         if (startEvent) {
           const endTimestamp = finishEvent?.timestamp 
             || lessonQuizzes.reduce((latest, q) => {
@@ -89,7 +89,11 @@ export class DatabaseStorage implements IStorage {
                }, null as Date | null);
 
           if (endTimestamp) {
-            durationMinutes = Math.round((endTimestamp.getTime() - startEvent.timestamp.getTime()) / (1000 * 60));
+            // Calculate difference in days
+            const diffTime = endTimestamp.getTime() - startEvent.timestamp.getTime();
+            durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            // Ensure at least 1 day if it started and finished
+            if (durationDays === 0) durationDays = 1;
           }
         }
         
@@ -97,7 +101,7 @@ export class DatabaseStorage implements IStorage {
           lessonId,
           isFinished: !!finishEvent || lessonQuizzes.some(q => q.isSubmitted),
           finishedAt: finishEvent?.timestamp.toISOString() || lessonQuizzes.sort((a,b) => (b.submittedAt?.localeCompare(a.submittedAt || '') || 0))[0]?.submittedAt,
-          durationMinutes,
+          durationDays,
           quizzes: lessonQuizzes
         };
       });

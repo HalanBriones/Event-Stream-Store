@@ -96,7 +96,7 @@ export default function StudentDetailsPage() {
                           {lesson.isFinished && (
                             <div className="text-sm text-muted-foreground text-right">
                               <div>Finished: {format(new Date(lesson.finishedAt), "MMM d, yyyy HH:mm")}</div>
-                              <div className="font-medium text-primary">Time to finish: {lesson.durationMinutes || 0} mins</div>
+                              <div className="font-medium text-primary">Time to finish: {lesson.durationDays || 0} {lesson.durationDays === 1 ? 'day' : 'days'}</div>
                             </div>
                           )}
                         </div>
