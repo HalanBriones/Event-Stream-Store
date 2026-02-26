@@ -60,7 +60,7 @@ export class DatabaseStorage implements IStorage {
       const completionEvent = courseEvents.find(e => e.eventType === 'course_ended');
       
       const lessons = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))).map(lessonId => {
-        const startEvent = courseEvents.find(e => e.lessonId === lessonId && e.eventType === 'lesson_started');
+        const startEvent = courseEvents.find(e => e.lessonId === lessonId && (e.eventType === 'lesson_started' || e.eventType === 'lesson_start'));
         const finishEvent = courseEvents.find(e => e.lessonId === lessonId && e.eventType === 'lesson_finished');
         
         const lessonQuizzes = Array.from(new Set(courseEvents.filter(e => e.lessonId === lessonId && e.quizId).map(e => e.quizId!))).map(quizId => {
