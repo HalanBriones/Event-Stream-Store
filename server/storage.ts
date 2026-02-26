@@ -101,6 +101,7 @@ export class DatabaseStorage implements IStorage {
         return {
           lessonId,
           isFinished: !!finishEvent || lessonQuizzes.some(q => q.isSubmitted),
+          startedAt: startEvent?.timestamp.toISOString(),
           finishedAt: finishEvent?.timestamp.toISOString() || lessonQuizzes.sort((a,b) => (b.submittedAt?.localeCompare(a.submittedAt || '') || 0))[0]?.submittedAt,
           durationDays,
           quizzes: lessonQuizzes
