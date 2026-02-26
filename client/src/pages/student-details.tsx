@@ -93,12 +93,16 @@ export default function StudentDetailsPage() {
                               <Circle className="h-5 w-5 text-muted-foreground" />
                             )}
                           </h3>
-                          {lesson.isFinished && (
-                            <div className="text-sm text-muted-foreground text-right">
-                              {lesson.startedAt && <div>Started: {format(new Date(lesson.startedAt), "MMM d, yyyy HH:mm")}</div>}
+                          <div className="text-sm text-muted-foreground text-right">
+                            {lesson.startedAt ? (
+                              <div>Started: {format(new Date(lesson.startedAt), "MMM d, yyyy HH:mm")}</div>
+                            ) : (
+                              <div className="italic text-xs">No start record</div>
+                            )}
+                            {lesson.isFinished && (
                               <div className="font-medium text-primary">Time to finish: {lesson.durationDays || 0} {lesson.durationDays === 1 ? 'day' : 'days'}</div>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
 
                         {lesson.quizzes?.length > 0 && (
