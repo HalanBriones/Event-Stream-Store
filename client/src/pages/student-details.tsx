@@ -100,7 +100,17 @@ export default function StudentDetailsPage() {
                               <div className="italic text-xs">No start record</div>
                             )}
                             {lesson.isFinished && (
-                              <div className="font-medium text-primary">Time to finish: {lesson.durationDays || 0} {lesson.durationDays === 1 ? 'day' : 'days'}</div>
+                              <div className="font-medium text-primary">
+                                Time to finish: {lesson.durationDays > 0 ? (
+                                  `${lesson.durationDays} ${lesson.durationDays === 1 ? 'day' : 'days'}`
+                                ) : (
+                                  lesson.durationMinutes >= 60 ? (
+                                    `${Math.floor(lesson.durationMinutes / 60)}h ${lesson.durationMinutes % 60}m`
+                                  ) : (
+                                    `${lesson.durationMinutes}m`
+                                  )
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>

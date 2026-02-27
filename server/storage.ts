@@ -78,6 +78,7 @@ export class DatabaseStorage implements IStorage {
 
         // Calculate lesson duration: from lesson_started to the last quiz_submitted or lesson_finished
         let durationDays: number | undefined;
+        let durationMinutes: number | undefined;
         if (startEvent) {
           const endTimestamp = finishEvent?.timestamp 
             || lessonQuizzes.reduce((latest, q) => {
@@ -89,12 +90,14 @@ export class DatabaseStorage implements IStorage {
                }, null as Date | null);
 
           if (endTimestamp) {
-            // Calculate difference in days (end - start)
+            const diffTime = endTimestamp.getTime() - startEvent.timestamp.getTime();
+            durationMinutes = Math.round(diffTime / (1000 * 60));
+            
+            // Calculate difference in calendar days (end - start)
             const startDate = new Date(startEvent.timestamp.getFullYear(), startEvent.timestamp.getMonth(), startEvent.timestamp.getDate());
             const endDate = new Date(endTimestamp.getFullYear(), endTimestamp.getMonth(), endTimestamp.getDate());
-            const diffTime = endDate.getTime() - startDate.getTime();
-            durationDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-            // If it's the same day, we'll show 0 or 1 based on preference, but usually "days to finish" implies calendar day difference
+            const diffTimeDays = endDate.getTime() - startDate.getTime();
+            durationDays = Math.floor(diffTimeDays / (1000 * 60 * 60 * 24));
           }
         }
         
@@ -104,6 +107,7 @@ export class DatabaseStorage implements IStorage {
           startedAt: startEvent?.timestamp.toISOString(),
           finishedAt: finishEvent?.timestamp.toISOString() || lessonQuizzes.sort((a,b) => (b.submittedAt?.localeCompare(a.submittedAt || '') || 0))[0]?.submittedAt,
           durationDays,
+          durationMinutes,
           quizzes: lessonQuizzes
         };
       });
