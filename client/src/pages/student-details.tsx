@@ -5,12 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, GraduationCap } from "lucide-react";
+import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, GraduationCap, Lightbulb } from "lucide-react";
 import { format } from "date-fns";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export default function StudentDetailsPage() {
   const { id } = useParams();
   const userId = Number(id);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
 
   const { data: stats, isLoading } = useQuery<any>({
     queryKey: [api.events.studentStats.path, userId],
@@ -25,16 +28,120 @@ export default function StudentDetailsPage() {
     );
   }
 
+  const formatDuration = (minutes: number | undefined) => {
+    if (minutes === undefined) return "N/A";
+    if (minutes < 60) return `${minutes}m`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h}h ${m}m`;
+  };
+
+  const formatDays = (days: number | undefined) => {
+    if (days === undefined) return "N/A";
+    return `${days} ${days === 1 ? 'day' : 'days'}`;
+  };
+
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-5xl mx-auto space-y-8">
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <h1 className="text-3xl font-bold tracking-tight">Student Details: {userId}</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <h1 className="text-3xl font-bold tracking-tight">Student Details: {userId}</h1>
+          </div>
+          
+          <Dialog open={isInsightsOpen} onOpenChange={setIsInsightsOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Lightbulb className="h-4 w-4 text-yellow-500" />
+                Insights
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5 text-yellow-500" />
+                  Learning Insights - Student {userId}
+                </DialogTitle>
+              </DialogHeader>
+              
+              <div className="space-y-6 py-4">
+                {stats?.courses?.map((course: any) => (
+                  <div key={course.courseId} className="space-y-4">
+                    <h3 className="font-bold text-lg border-b pb-1">Course {course.courseId}</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card className="bg-muted/30">
+                        <CardHeader className="py-2 px-4">
+                          <CardTitle className="text-sm font-medium">Course Completion Time</CardTitle>
+                        </CardHeader>
+                        <CardContent className="py-2 px-4">
+                          <p className="text-xl font-bold">{formatDuration(course.durationMinutes)}</p>
+                          <p className="text-xs text-muted-foreground">(Enrollment to End)</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Lesson Breakdowns</h4>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Lesson</TableHead>
+                            <TableHead>Lesson Time</TableHead>
+                            <TableHead>Quiz Time(s)</TableHead>
+                            <TableHead>Gap from Prev</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {course.lessons?.map((lesson: any, index: number) => {
+                            const prevLesson = index > 0 ? course.lessons[index - 1] : null;
+                            let gapText = "First Lesson";
+                            
+                            if (prevLesson && prevLesson.finishedAt && lesson.startedAt) {
+                              const gapMs = new Date(lesson.startedAt).getTime() - new Date(prevLesson.finishedAt).getTime();
+                              const gapMins = Math.round(gapMs / (1000 * 60));
+                              if (gapMins >= 1440) {
+                                const days = Math.floor(gapMins / 1440);
+                                gapText = `${days}d ${Math.floor((gapMins % 1440) / 60)}h`;
+                              } else if (gapMins >= 60) {
+                                gapText = `${Math.floor(gapMins / 60)}h ${gapMins % 60}m`;
+                              } else {
+                                gapText = `${gapMins}m`;
+                              }
+                            } else if (index > 0) {
+                              gapText = "N/A";
+                            }
+
+                            return (
+                              <TableRow key={lesson.lessonId}>
+                                <TableCell className="font-medium">L{lesson.lessonId}</TableCell>
+                                <TableCell>{formatDuration(lesson.lessonDurationMinutes)}</TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col gap-1">
+                                    {lesson.quizzes?.map((q: any) => (
+                                      <span key={q.quizId} className="text-xs whitespace-nowrap">
+                                        Q{q.quizId}: {formatDuration(q.durationMinutes)}
+                                      </span>
+                                    )) || "None"}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">{gapText}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">

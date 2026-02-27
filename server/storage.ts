@@ -58,6 +58,11 @@ export class DatabaseStorage implements IStorage {
       const courseEvents = studentEvents.filter(e => e.courseId === courseId);
       const enrollmentEvent = courseEvents.find(e => e.eventType === 'course_enrollment');
       const completionEvent = courseEvents.find(e => e.eventType === 'course_ended');
+
+      let courseDurationMinutes: number | undefined;
+      if (enrollmentEvent && completionEvent) {
+        courseDurationMinutes = Math.round((completionEvent.timestamp.getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60));
+      }
       
       const lessons = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))).map(lessonId => {
         const startEvent = courseEvents.find(e => e.lessonId === lessonId && (e.eventType === 'lesson_started' || e.eventType === 'lesson_start'));
@@ -78,7 +83,7 @@ export class DatabaseStorage implements IStorage {
 
         // Calculate lesson duration: from lesson_started to the last quiz_submitted or lesson_finished
         let durationDays: number | undefined;
-        let durationMinutes: number | undefined;
+        let lessonDurationMinutes: number | undefined;
         if (startEvent) {
           const endTimestamp = finishEvent?.timestamp 
             || lessonQuizzes.reduce((latest, q) => {
@@ -91,7 +96,7 @@ export class DatabaseStorage implements IStorage {
 
           if (endTimestamp) {
             const diffTime = endTimestamp.getTime() - startEvent.timestamp.getTime();
-            durationMinutes = Math.round(diffTime / (1000 * 60));
+            lessonDurationMinutes = Math.round(diffTime / (1000 * 60));
             
             // Calculate difference in calendar days (end - start)
             const startDate = new Date(startEvent.timestamp.getFullYear(), startEvent.timestamp.getMonth(), startEvent.timestamp.getDate());
@@ -107,7 +112,7 @@ export class DatabaseStorage implements IStorage {
           startedAt: startEvent?.timestamp.toISOString(),
           finishedAt: finishEvent?.timestamp.toISOString() || lessonQuizzes.sort((a,b) => (b.submittedAt?.localeCompare(a.submittedAt || '') || 0))[0]?.submittedAt,
           durationDays,
-          durationMinutes,
+          lessonDurationMinutes,
           quizzes: lessonQuizzes
         };
       });
@@ -129,7 +134,7 @@ export class DatabaseStorage implements IStorage {
       return {
         courseId,
         isCompleted: !!completionEvent,
-        durationMinutes,
+        durationMinutes: courseDurationMinutes,
         lessons,
         quizzes: orphanQuizzes
       };
