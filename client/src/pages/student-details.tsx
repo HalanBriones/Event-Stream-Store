@@ -125,7 +125,7 @@ export default function StudentDetailsPage() {
                                     </p>
                                   </div>
 
-                                  <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-2">
                                     {lesson.quizzes?.map((q: any) => (
                                       <div key={q.quizId} className="bg-secondary/50 border rounded-lg p-2 min-w-[120px]">
                                         <div className="text-[10px] font-bold text-muted-foreground uppercase">Quiz {q.quizId}</div>
@@ -133,6 +133,11 @@ export default function StudentDetailsPage() {
                                           <CheckCircle2 className="h-3 w-3 text-green-500" />
                                           {formatDuration(q.durationMinutes)}
                                         </div>
+                                        {q.isSubmitted && q.submittedAt && (
+                                          <div className="text-[9px] text-muted-foreground mt-1">
+                                            Sub: {format(new Date(q.submittedAt), "HH:mm")}
+                                          </div>
+                                        )}
                                       </div>
                                     ))}
                                     {(!lesson.quizzes || lesson.quizzes.length === 0) && (
