@@ -29,11 +29,33 @@ export default function StudentDetailsPage() {
   }
 
   const formatDuration = (minutes: number | undefined) => {
-    if (minutes === undefined) return "N/A";
+    if (minutes === undefined || minutes === null) return "N/A";
+    if (minutes === 0) return "< 1m";
     if (minutes < 60) return `${minutes}m`;
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
-    return `${h}h ${m}m`;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  };
+
+  const getRushingStatus = (course: any) => {
+    if (!course.lessons || course.lessons.length === 0) return null;
+    
+    const fastLessons = course.lessons.filter((l: any) => 
+      l.isFinished && l.lessonDurationMinutes !== undefined && l.lessonDurationMinutes < 5
+    );
+    
+    const fastQuizzes = course.lessons.flatMap((l: any) => l.quizzes || [])
+      .filter((q: any) => q.isSubmitted && q.durationMinutes !== undefined && q.durationMinutes < 1);
+
+    const isRushing = fastLessons.length > 0 || fastQuizzes.length > 0;
+    
+    if (isRushing) {
+      return {
+        level: (fastLessons.length + fastQuizzes.length) > 3 ? "High" : "Moderate",
+        reason: `${fastLessons.length} fast lessons, ${fastQuizzes.length} fast quizzes`
+      };
+    }
+    return null;
   };
 
   const formatDays = (days: number | undefined) => {
@@ -82,6 +104,46 @@ export default function StudentDetailsPage() {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                      <Card className="bg-primary/5 border-primary/10">
+                        <CardContent className="pt-4 text-center">
+                          <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Active Learning Days</div>
+                          <div className="text-3xl font-bold text-primary">{course.activeDays || 0}</div>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-primary/5 border-primary/10">
+                        <CardContent className="pt-4 text-center">
+                          <div className="text-xs font-bold text-muted-foreground uppercase mb-1">First Lesson Gap</div>
+                          <div className="text-3xl font-bold text-primary">{formatDuration(course.gapEnrollmentToFirstLessonMinutes)}</div>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-primary/5 border-primary/10">
+                        <CardContent className="pt-4 text-center">
+                          <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Course Status</div>
+                          <div className="text-3xl font-bold text-primary capitalize">{course.isCompleted ? "Finished" : "Active"}</div>
+                        </CardContent>
+                      </Card>
+                      {(() => {
+                        const rushing = getRushingStatus(course);
+                        return rushing ? (
+                          <Card className="bg-destructive/5 border-destructive/20">
+                            <CardContent className="pt-4 text-center">
+                              <div className="text-xs font-bold text-destructive uppercase mb-1">Rushing Behavior</div>
+                              <div className="text-xl font-bold text-destructive">{rushing.level}</div>
+                              <div className="text-[10px] text-destructive/70">{rushing.reason}</div>
+                            </CardContent>
+                          </Card>
+                        ) : (
+                          <Card className="bg-green-500/5 border-green-500/20">
+                            <CardContent className="pt-4 text-center">
+                              <div className="text-xs font-bold text-green-600 uppercase mb-1">Learning Pace</div>
+                              <div className="text-xl font-bold text-green-600">Steady</div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })()}
+                    </div>
+
                     <div className="grid grid-cols-1 gap-6">
                       {course.lessons?.map((lesson: any, index: number) => {
                         const prevLesson = index > 0 ? course.lessons[index - 1] : null;
@@ -125,23 +187,28 @@ export default function StudentDetailsPage() {
                                     </p>
                                   </div>
 
-                          <div className="flex flex-wrap gap-2">
+                                  <div className="flex flex-wrap gap-2">
                                     {lesson.quizzes?.map((q: any) => (
-                                      <div key={q.quizId} className="bg-secondary/50 border rounded-lg p-2 min-w-[120px]">
-                                        <div className="text-[10px] font-bold text-muted-foreground uppercase">Quiz {q.quizId}</div>
-                                        <div className="text-sm font-semibold flex items-center gap-1">
+                                      <div key={q.quizId} className="bg-secondary/50 border rounded-lg p-2 min-w-[140px]">
+                                        <div className="text-[10px] font-bold text-muted-foreground uppercase flex justify-between items-start gap-2">
+                                          <span>Quiz {q.quizId}</span>
+                                          {q.gapFromLessonStartMinutes !== undefined && (
+                                            <span className="text-[8px] opacity-70">+{formatDuration(q.gapFromLessonStartMinutes)} gap</span>
+                                          )}
+                                        </div>
+                                        <div className="text-sm font-semibold flex items-center gap-1 mt-1">
                                           <CheckCircle2 className="h-3 w-3 text-green-500" />
-                                          {formatDuration(q.durationMinutes)}
+                                          Time: {formatDuration(q.durationMinutes)}
                                         </div>
                                         {q.isSubmitted && q.submittedAt && (
-                                          <div className="text-[9px] text-muted-foreground mt-1">
+                                          <div className="text-[9px] text-muted-foreground mt-1 font-mono">
                                             Sub: {format(new Date(q.submittedAt), "HH:mm")}
                                           </div>
                                         )}
                                       </div>
                                     ))}
                                     {(!lesson.quizzes || lesson.quizzes.length === 0) && (
-                                      <span className="text-xs italic text-muted-foreground">No quizzes taken</span>
+                                      <span className="text-xs italic text-muted-foreground p-2">No quizzes recorded</span>
                                     )}
                                   </div>
                                 </div>

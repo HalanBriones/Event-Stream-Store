@@ -55,7 +55,7 @@ export class DatabaseStorage implements IStorage {
     const enrolledCourseIds = Array.from(new Set(studentEvents.filter(e => e.eventType === 'course_enrollment').map(e => e.courseId)));
     
     const courses = enrolledCourseIds.map(courseId => {
-      const courseEvents = studentEvents.filter(e => e.courseId === courseId);
+      const courseEvents = studentEvents.filter(e => e.courseId === courseId).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
       const enrollmentEvent = courseEvents.find(e => e.eventType === 'course_enrollment');
       const completionEvent = courseEvents.find(e => e.eventType === 'course_ended');
 
@@ -71,13 +71,21 @@ export class DatabaseStorage implements IStorage {
         const lessonQuizzes = Array.from(new Set(courseEvents.filter(e => e.lessonId === lessonId && e.quizId).map(e => e.quizId!))).map(quizId => {
           const quizStartEvent = courseEvents.find(e => e.quizId === quizId && e.eventType === 'quiz_started');
           const submitEvent = courseEvents.find(e => e.quizId === quizId && e.eventType === 'quiz_submitted');
+          
+          let gapFromLessonStartMinutes: number | undefined;
+          if (startEvent && quizStartEvent) {
+            gapFromLessonStartMinutes = Math.round((quizStartEvent.timestamp.getTime() - startEvent.timestamp.getTime()) / (1000 * 60));
+          }
+
           return {
             quizId,
             isSubmitted: !!submitEvent,
             submittedAt: submitEvent?.timestamp.toISOString(),
+            startedAt: quizStartEvent?.timestamp.toISOString(),
             durationMinutes: (quizStartEvent && submitEvent) 
               ? Math.round((submitEvent.timestamp.getTime() - quizStartEvent.timestamp.getTime()) / (1000 * 60))
-              : undefined
+              : undefined,
+            gapFromLessonStartMinutes
           };
         });
 
@@ -117,6 +125,16 @@ export class DatabaseStorage implements IStorage {
         };
       });
 
+      // Calculate gaps between lessons
+      const firstLessonStart = lessons.length > 0 ? lessons[0].startedAt : null;
+      let gapEnrollmentToFirstLessonMinutes: number | undefined;
+      if (enrollmentEvent && firstLessonStart) {
+        gapEnrollmentToFirstLessonMinutes = Math.round((new Date(firstLessonStart).getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60));
+      }
+
+      // Active days: distinct calendar days with any event
+      const activeDays = new Set(courseEvents.map(e => e.timestamp.toDateString())).size;
+
       const orphanQuizzes = Array.from(new Set(courseEvents.filter(e => !e.lessonId && e.quizId).map(e => e.quizId!))).map(quizId => {
         const submitEvent = courseEvents.find(e => e.quizId === quizId && e.eventType === 'quiz_submitted');
         return {
@@ -126,15 +144,12 @@ export class DatabaseStorage implements IStorage {
         };
       });
 
-      let durationMinutes: number | undefined;
-      if (enrollmentEvent && completionEvent) {
-        durationMinutes = Math.round((completionEvent.timestamp.getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60));
-      }
-
       return {
         courseId,
         isCompleted: !!completionEvent,
         durationMinutes: courseDurationMinutes,
+        gapEnrollmentToFirstLessonMinutes,
+        activeDays,
         lessons,
         quizzes: orphanQuizzes
       };
