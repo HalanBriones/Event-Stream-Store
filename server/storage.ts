@@ -59,11 +59,6 @@ export class DatabaseStorage implements IStorage {
       const enrollmentEvent = courseEvents.find(e => e.eventType === 'course_enrollment');
       const completionEvent = courseEvents.find(e => e.eventType === 'course_ended');
 
-      let courseDurationMinutes: number | undefined;
-      if (enrollmentEvent && completionEvent) {
-        courseDurationMinutes = Math.round((completionEvent.timestamp.getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60));
-      }
-      
       const lessons = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))).map(lessonId => {
         const startEvent = courseEvents.find(e => e.lessonId === lessonId && (e.eventType === 'lesson_started' || e.eventType === 'lesson_start'));
         const finishEvent = courseEvents.find(e => e.lessonId === lessonId && e.eventType === 'lesson_finished');
@@ -125,8 +120,22 @@ export class DatabaseStorage implements IStorage {
         };
       });
 
+      // Course end is either explicit event OR the finish time of the last lesson
+      const lastLessonFinish = lessons.filter(l => l.finishedAt).sort((a, b) => new Date(b.finishedAt!).getTime() - new Date(a.finishedAt!).getTime())[0]?.finishedAt;
+      const courseEndTime = completionEvent?.timestamp || (lastLessonFinish ? new Date(lastLessonFinish) : null);
+
+      let courseDurationMinutes: number | undefined;
+      if (enrollmentEvent && courseEndTime) {
+        courseDurationMinutes = Math.round((courseEndTime.getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60));
+      }
+
       // Calculate gaps between lessons
-      const firstLessonStart = lessons.length > 0 ? lessons[0].startedAt : null;
+      const sortedLessons = [...lessons].sort((a, b) => {
+        if (!a.startedAt || !b.startedAt) return 0;
+        return new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime();
+      });
+
+      const firstLessonStart = sortedLessons.length > 0 ? sortedLessons[0].startedAt : null;
       let gapEnrollmentToFirstLessonMinutes: number | undefined;
       if (enrollmentEvent && firstLessonStart) {
         gapEnrollmentToFirstLessonMinutes = Math.round((new Date(firstLessonStart).getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60));
@@ -146,11 +155,11 @@ export class DatabaseStorage implements IStorage {
 
       return {
         courseId,
-        isCompleted: !!completionEvent,
+        isCompleted: !!completionEvent || (lessons.length > 0 && lessons.every(l => l.isFinished)),
         durationMinutes: courseDurationMinutes,
         gapEnrollmentToFirstLessonMinutes,
         activeDays,
-        lessons,
+        lessons: sortedLessons,
         quizzes: orphanQuizzes
       };
     });
