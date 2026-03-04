@@ -117,59 +117,59 @@ export default function StudentDetailsPage() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
-                          <CardContent className="pt-6 text-center">
-                            <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
-                              <Activity className="h-5 w-5 text-blue-600" />
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                                <CardContent className="pt-6 text-center">
+                                  <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
+                                    <BookOpen className="h-5 w-5 text-blue-600" />
+                                  </div>
+                                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Active Days</div>
+                                  <div className="text-2xl font-bold text-foreground">{course.activeDays || 0}</div>
+                                </CardContent>
+                              </Card>
+                              <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                                <CardContent className="pt-6 text-center">
+                                  <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
+                                    <Clock className="h-5 w-5 text-purple-600" />
+                                  </div>
+                                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">First Engagement</div>
+                                  <div className="text-2xl font-bold text-foreground">{formatDuration(course.gapEnrollmentToFirstLessonMinutes)}</div>
+                                </CardContent>
+                              </Card>
+                              <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                                <CardContent className="pt-6 text-center">
+                                  <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                  </div>
+                                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Status</div>
+                                  <div className="text-2xl font-bold text-foreground capitalize">{course.isCompleted ? "Done" : "Active"}</div>
+                                </CardContent>
+                              </Card>
+                              {(() => {
+                                const rushing = getRushingStatus(course);
+                                return rushing ? (
+                                  <Card className="border-none bg-destructive/10 shadow-sm hover:shadow-md transition-all">
+                                    <CardContent className="pt-6 text-center">
+                                      <div className="h-10 w-10 rounded-lg bg-destructive/20 flex items-center justify-center mx-auto mb-3">
+                                        <BookOpen className="h-5 w-5 text-destructive" />
+                                      </div>
+                                      <div className="text-[10px] font-bold text-destructive uppercase tracking-wider mb-1">Pace Alert</div>
+                                      <div className="text-2xl font-bold text-destructive">{rushing.level}</div>
+                                    </CardContent>
+                                  </Card>
+                                ) : (
+                                  <Card className="border-none bg-green-500/10 shadow-sm hover:shadow-md transition-all">
+                                    <CardContent className="pt-6 text-center">
+                                      <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center mx-auto mb-3">
+                                        <BookOpen className="h-5 w-5 text-green-600" />
+                                      </div>
+                                      <div className="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">Pace</div>
+                                      <div className="text-2xl font-bold text-green-600 text-center">Healthy</div>
+                                    </CardContent>
+                                  </Card>
+                                );
+                              })()}
                             </div>
-                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Active Days</div>
-                            <div className="text-2xl font-bold text-foreground">{course.activeDays || 0}</div>
-                          </CardContent>
-                        </Card>
-                        <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
-                          <CardContent className="pt-6 text-center">
-                            <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
-                              <Clock className="h-5 w-5 text-purple-600" />
-                            </div>
-                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">First Engagement</div>
-                            <div className="text-2xl font-bold text-foreground">{formatDuration(course.gapEnrollmentToFirstLessonMinutes)}</div>
-                          </CardContent>
-                        </Card>
-                        <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
-                          <CardContent className="pt-6 text-center">
-                            <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center mx-auto mb-3">
-                              <CheckCircle2 className="h-5 w-5 text-green-600" />
-                            </div>
-                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Status</div>
-                            <div className="text-2xl font-bold text-foreground capitalize">{course.isCompleted ? "Done" : "Active"}</div>
-                          </CardContent>
-                        </Card>
-                        {(() => {
-                          const rushing = getRushingStatus(course);
-                          return rushing ? (
-                            <Card className="border-none bg-destructive/10 shadow-sm hover:shadow-md transition-all">
-                              <CardContent className="pt-6 text-center">
-                                <div className="h-10 w-10 rounded-lg bg-destructive/20 flex items-center justify-center mx-auto mb-3">
-                                  <Activity className="h-5 w-5 text-destructive" />
-                                </div>
-                                <div className="text-[10px] font-bold text-destructive uppercase tracking-wider mb-1">Pace Alert</div>
-                                <div className="text-2xl font-bold text-destructive">{rushing.level}</div>
-                              </CardContent>
-                            </Card>
-                          ) : (
-                            <Card className="border-none bg-green-500/10 shadow-sm hover:shadow-md transition-all">
-                              <CardContent className="pt-6 text-center">
-                                <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center mx-auto mb-3">
-                                  <Activity className="h-5 w-5 text-green-600" />
-                                </div>
-                                <div className="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">Pace</div>
-                                <div className="text-2xl font-bold text-green-600 text-center">Healthy</div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })()}
-                      </div>
 
                       <div className="space-y-4">
                         {course.lessons?.map((lesson: any, index: number) => {
