@@ -29,7 +29,7 @@ export default function StudentDetailsPage() {
   }
 
   const formatDuration = (minutes: number | undefined) => {
-    if (minutes === undefined || minutes === null) return "N/A";
+    if (minutes === undefined || minutes === null || isNaN(minutes)) return "Calculating...";
     if (minutes === 0) return "< 1m";
     if (minutes < 60) return `${minutes}m`;
     const h = Math.floor(minutes / 60);
@@ -59,7 +59,7 @@ export default function StudentDetailsPage() {
   };
 
   const formatDays = (days: number | undefined) => {
-    if (days === undefined) return "N/A";
+    if (days === undefined || days === null || isNaN(days)) return "N/A";
     return `${days} ${days === 1 ? 'day' : 'days'}`;
   };
 
@@ -117,59 +117,59 @@ export default function StudentDetailsPage() {
                         </div>
                       </div>
 
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                              <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
-                                <CardContent className="pt-6 text-center">
-                                  <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
-                                    <BookOpen className="h-5 w-5 text-blue-600" />
-                                  </div>
-                                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Active Days</div>
-                                  <div className="text-2xl font-bold text-foreground">{course.activeDays || 0}</div>
-                                </CardContent>
-                              </Card>
-                              <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
-                                <CardContent className="pt-6 text-center">
-                                  <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
-                                    <Clock className="h-5 w-5 text-purple-600" />
-                                  </div>
-                                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">First Engagement</div>
-                                  <div className="text-2xl font-bold text-foreground">{formatDuration(course.gapEnrollmentToFirstLessonMinutes)}</div>
-                                </CardContent>
-                              </Card>
-                              <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
-                                <CardContent className="pt-6 text-center">
-                                  <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center mx-auto mb-3">
-                                    <CheckCircle2 className="h-5 w-5 text-green-600" />
-                                  </div>
-                                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Status</div>
-                                  <div className="text-2xl font-bold text-foreground capitalize">{course.isCompleted ? "Done" : "Active"}</div>
-                                </CardContent>
-                              </Card>
-                              {(() => {
-                                const rushing = getRushingStatus(course);
-                                return rushing ? (
-                                  <Card className="border-none bg-destructive/10 shadow-sm hover:shadow-md transition-all">
-                                    <CardContent className="pt-6 text-center">
-                                      <div className="h-10 w-10 rounded-lg bg-destructive/20 flex items-center justify-center mx-auto mb-3">
-                                        <BookOpen className="h-5 w-5 text-destructive" />
-                                      </div>
-                                      <div className="text-[10px] font-bold text-destructive uppercase tracking-wider mb-1">Pace Alert</div>
-                                      <div className="text-2xl font-bold text-destructive">{rushing.level}</div>
-                                    </CardContent>
-                                  </Card>
-                                ) : (
-                                  <Card className="border-none bg-green-500/10 shadow-sm hover:shadow-md transition-all">
-                                    <CardContent className="pt-6 text-center">
-                                      <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center mx-auto mb-3">
-                                        <BookOpen className="h-5 w-5 text-green-600" />
-                                      </div>
-                                      <div className="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">Pace</div>
-                                      <div className="text-2xl font-bold text-green-600 text-center">Healthy</div>
-                                    </CardContent>
-                                  </Card>
-                                );
-                              })()}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                          <CardContent className="pt-6 text-center">
+                            <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
+                              <BookOpen className="h-5 w-5 text-blue-600" />
                             </div>
+                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Active Days</div>
+                            <div className="text-2xl font-bold text-foreground">{course.activeDays || 0}</div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                          <CardContent className="pt-6 text-center">
+                            <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
+                              <Clock className="h-5 w-5 text-purple-600" />
+                            </div>
+                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">First Engagement</div>
+                            <div className="text-2xl font-bold text-foreground">{formatDuration(course.gapEnrollmentToFirstLessonMinutes)}</div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                          <CardContent className="pt-6 text-center">
+                            <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                              <CheckCircle2 className="h-5 w-5 text-green-600" />
+                            </div>
+                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Status</div>
+                            <div className="text-2xl font-bold text-foreground capitalize">{course.isCompleted ? "Done" : "Active"}</div>
+                          </CardContent>
+                        </Card>
+                        {(() => {
+                          const rushing = getRushingStatus(course);
+                          return rushing ? (
+                            <Card className="border-none bg-destructive/10 shadow-sm hover:shadow-md transition-all">
+                              <CardContent className="pt-6 text-center">
+                                <div className="h-10 w-10 rounded-lg bg-destructive/20 flex items-center justify-center mx-auto mb-3">
+                                  <BookOpen className="h-5 w-5 text-destructive" />
+                                </div>
+                                <div className="text-[10px] font-bold text-destructive uppercase tracking-wider mb-1">Pace Alert</div>
+                                <div className="text-2xl font-bold text-destructive">{rushing.level}</div>
+                              </CardContent>
+                            </Card>
+                          ) : (
+                            <Card className="border-none bg-green-500/10 shadow-sm hover:shadow-md transition-all">
+                              <CardContent className="pt-6 text-center">
+                                <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center mx-auto mb-3">
+                                  <BookOpen className="h-5 w-5 text-green-600" />
+                                </div>
+                                <div className="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">Pace</div>
+                                <div className="text-2xl font-bold text-green-600 text-center">Healthy</div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })()}
+                      </div>
 
                       <div className="space-y-4">
                         {course.lessons?.map((lesson: any, index: number) => {
@@ -238,7 +238,7 @@ export default function StudentDetailsPage() {
                                             <div className="h-5 w-5 rounded-full bg-green-500/10 flex items-center justify-center">
                                               <CheckCircle2 className="h-3 w-3 text-green-600" />
                                             </div>
-                                            {q.durationMinutes !== undefined && q.durationMinutes !== null ? (
+                                            {q.durationMinutes !== undefined && q.durationMinutes !== null && !isNaN(q.durationMinutes) ? (
                                               <span>Took {formatDuration(q.durationMinutes)}</span>
                                             ) : (
                                               <span className="text-muted-foreground italic text-xs">Still in progress or data missing</span>
@@ -346,15 +346,19 @@ export default function StudentDetailsPage() {
                               )}
                               {lesson.isFinished ? (
                                 <div className="font-black text-primary text-xs mt-1">
-                                  Completed in: {lesson.durationDays > 0 ? (
-                                    `${lesson.durationDays}d+`
-                                  ) : (
-                                    lesson.lessonDurationMinutes >= 60 ? (
-                                      `${Math.floor(lesson.durationMinutes / 60)}h ${lesson.durationMinutes % 60}m`
-                                    ) : (
-                                      `${lesson.lessonDurationMinutes}m`
-                                    )
-                                  )}
+                                  Completed in: {(() => {
+                                    const mins = lesson.lessonDurationMinutes;
+                                    const days = lesson.durationDays;
+                                    const finalMins = (mins !== undefined && mins !== null && !isNaN(mins)) ? mins : 0;
+                                    
+                                    if (days > 0) {
+                                      const h = Math.floor((finalMins % 1440) / 60);
+                                      const m = finalMins % 60;
+                                      return `${days}d ${h}h ${m}m`;
+                                    }
+                                    if (finalMins >= 60) return `${Math.floor(finalMins / 60)}h ${finalMins % 60}m`;
+                                    return `${finalMins}m`;
+                                  })()}
                                 </div>
                               ) : lesson.startedAt ? (
                                 <div className="text-[10px] text-orange-600 font-bold mt-1 uppercase">Currently In Progress</div>

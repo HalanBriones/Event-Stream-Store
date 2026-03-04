@@ -68,8 +68,13 @@ export class DatabaseStorage implements IStorage {
           const submitEvent = courseEvents.find(e => e.quizId === quizId && e.eventType === 'quiz_submitted');
           
           let gapFromLessonStartMinutes: number | undefined;
-          if (startEvent && quizStartEvent) {
+          if (startEvent && quizStartEvent && !isNaN(startEvent.timestamp.getTime()) && !isNaN(quizStartEvent.timestamp.getTime())) {
             gapFromLessonStartMinutes = Math.round((quizStartEvent.timestamp.getTime() - startEvent.timestamp.getTime()) / (1000 * 60));
+          }
+
+          let durationMinutes: number | undefined;
+          if (quizStartEvent && submitEvent && !isNaN(quizStartEvent.timestamp.getTime()) && !isNaN(submitEvent.timestamp.getTime())) {
+            durationMinutes = Math.round((submitEvent.timestamp.getTime() - quizStartEvent.timestamp.getTime()) / (1000 * 60));
           }
 
           return {
@@ -77,9 +82,7 @@ export class DatabaseStorage implements IStorage {
             isSubmitted: !!submitEvent,
             submittedAt: submitEvent?.timestamp.toISOString(),
             startedAt: quizStartEvent?.timestamp.toISOString(),
-            durationMinutes: (quizStartEvent && submitEvent) 
-              ? Math.round((submitEvent.timestamp.getTime() - quizStartEvent.timestamp.getTime()) / (1000 * 60))
-              : undefined,
+            durationMinutes,
             gapFromLessonStartMinutes
           };
         });
@@ -89,23 +92,23 @@ export class DatabaseStorage implements IStorage {
         let lessonDurationMinutes: number | undefined;
         if (startEvent) {
           const endTimestamp = finishEvent?.timestamp 
-            || lessonQuizzes.reduce((latest, q) => {
+            || (lessonQuizzes.length > 0 ? lessonQuizzes.reduce((latest, q) => {
                  if (q.submittedAt) {
                    const d = new Date(q.submittedAt);
                    return (!latest || d > latest) ? d : latest;
                  }
                  return latest;
-               }, null as Date | null);
+               }, null as Date | null) : null);
 
-          if (endTimestamp) {
+          if (endTimestamp && !isNaN(endTimestamp.getTime())) {
             const diffTime = endTimestamp.getTime() - startEvent.timestamp.getTime();
-            lessonDurationMinutes = Math.round(diffTime / (1000 * 60));
+            lessonDurationMinutes = Math.max(0, Math.round(diffTime / (1000 * 60)));
             
             // Calculate difference in calendar days (end - start)
             const startDate = new Date(startEvent.timestamp.getFullYear(), startEvent.timestamp.getMonth(), startEvent.timestamp.getDate());
             const endDate = new Date(endTimestamp.getFullYear(), endTimestamp.getMonth(), endTimestamp.getDate());
             const diffTimeDays = endDate.getTime() - startDate.getTime();
-            durationDays = Math.floor(diffTimeDays / (1000 * 60 * 60 * 24));
+            durationDays = Math.max(0, Math.floor(diffTimeDays / (1000 * 60 * 60 * 24)));
           }
         }
         
