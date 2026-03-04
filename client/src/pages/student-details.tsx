@@ -238,7 +238,11 @@ export default function StudentDetailsPage() {
                                             <div className="h-5 w-5 rounded-full bg-green-500/10 flex items-center justify-center">
                                               <CheckCircle2 className="h-3 w-3 text-green-600" />
                                             </div>
-                                            {formatDuration(q.durationMinutes)}
+                                            {q.durationMinutes !== undefined && q.durationMinutes !== null ? (
+                                              <span>Took {formatDuration(q.durationMinutes)}</span>
+                                            ) : (
+                                              <span className="text-muted-foreground italic text-xs">Still in progress or data missing</span>
+                                            )}
                                           </div>
                                           {q.isSubmitted && q.submittedAt && (
                                             <div className="text-[9px] text-muted-foreground mt-2 font-semibold">
@@ -333,27 +337,29 @@ export default function StudentDetailsPage() {
                               <p className="text-xs font-medium text-muted-foreground">Session breakdown & assessment results</p>
                             </div>
                           </div>
-                          <div className="bg-background/80 border px-4 py-2 rounded-xl text-right shadow-sm group-hover:border-primary/30 transition-colors">
-                            <div className="text-[10px] font-black text-muted-foreground uppercase mb-0.5">Timeline Info</div>
-                            {lesson.startedAt ? (
-                              <div className="text-xs font-bold">{format(new Date(lesson.startedAt), "MMM d, HH:mm")}</div>
-                            ) : (
-                              <div className="text-xs font-bold text-destructive italic">Missing entry log</div>
-                            )}
-                            {lesson.isFinished && (
-                              <div className="font-black text-primary text-xs mt-1">
-                                Duration: {lesson.durationDays > 0 ? (
-                                  `${lesson.durationDays}d+`
-                                ) : (
-                                  lesson.durationMinutes >= 60 ? (
-                                    `${Math.floor(lesson.durationMinutes / 60)}h ${lesson.durationMinutes % 60}m`
+                            <div className="bg-background/80 border px-4 py-2 rounded-xl text-right shadow-sm group-hover:border-primary/30 transition-colors">
+                              <div className="text-[10px] font-black text-muted-foreground uppercase mb-0.5">Timeline Info</div>
+                              {lesson.startedAt ? (
+                                <div className="text-xs font-bold">Started: {format(new Date(lesson.startedAt), "MMM d, HH:mm")}</div>
+                              ) : (
+                                <div className="text-xs font-bold text-destructive italic">Not started yet</div>
+                              )}
+                              {lesson.isFinished ? (
+                                <div className="font-black text-primary text-xs mt-1">
+                                  Completed in: {lesson.durationDays > 0 ? (
+                                    `${lesson.durationDays}d+`
                                   ) : (
-                                    `${lesson.durationMinutes}m`
-                                  )
-                                )}
-                              </div>
-                            )}
-                          </div>
+                                    lesson.lessonDurationMinutes >= 60 ? (
+                                      `${Math.floor(lesson.durationMinutes / 60)}h ${lesson.durationMinutes % 60}m`
+                                    ) : (
+                                      `${lesson.lessonDurationMinutes}m`
+                                    )
+                                  )}
+                                </div>
+                              ) : lesson.startedAt ? (
+                                <div className="text-[10px] text-orange-600 font-bold mt-1 uppercase">Currently In Progress</div>
+                              ) : null}
+                            </div>
                         </div>
 
                         {lesson.quizzes?.length > 0 && (
