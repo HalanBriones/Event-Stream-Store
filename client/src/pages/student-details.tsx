@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, GraduationCap, Lightbulb } from "lucide-react";
+import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, GraduationCap, Lightbulb, Activity } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
