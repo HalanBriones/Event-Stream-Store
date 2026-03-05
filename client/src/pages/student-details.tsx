@@ -37,25 +37,91 @@ export default function StudentDetailsPage() {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
-  const getRushingStatus = (course: any) => {
-    if (!course.lessons || course.lessons.length === 0) return null;
+  const getPaceStatus = (course: any) => {
+    if (!course.lessons || course.lessons.length === 0) return { status: "Steady", level: "Healthy", color: "text-green-600", bg: "bg-green-500/10", border: "border-green-500/20" };
     
-    const fastLessons = course.lessons.filter((l: any) => 
-      l.isFinished && l.lessonDurationMinutes !== undefined && l.lessonDurationMinutes < 5
-    );
-    
-    const fastQuizzes = course.lessons.flatMap((l: any) => l.quizzes || [])
-      .filter((q: any) => q.isSubmitted && q.durationMinutes !== undefined && q.durationMinutes < 1);
+    let redFlags = 0;
+    const reasons: string[] = [];
 
-    const isRushing = fastLessons.length > 0 || fastQuizzes.length > 0;
-    
-    if (isRushing) {
+    // 1. Lesson time < 2 min
+    const veryFastLessons = course.lessons.filter((l: any) => l.isFinished && l.lessonDurationMinutes !== undefined && l.lessonDurationMinutes < 2);
+    if (veryFastLessons.length > 0) {
+      redFlags++;
+      reasons.push(`${veryFastLessons.length} lessons < 2m`);
+    }
+
+    // 2. Quiz start gap < 30 sec (0.5 min)
+    const quizzes = course.lessons.flatMap((l: any) => l.quizzes || []);
+    const fastGaps = quizzes.filter((q: any) => q.gapFromLessonStartMinutes !== undefined && q.gapFromLessonStartMinutes < 0.5);
+    if (fastGaps.length > 0) {
+      redFlags++;
+      reasons.push("Quiz started too fast");
+    }
+
+    // 3. Quiz time < 1 min
+    const fastQuizzes = quizzes.filter((q: any) => q.isSubmitted && q.durationMinutes !== undefined && q.durationMinutes < 1);
+    if (fastQuizzes.length > 0) {
+      redFlags++;
+      reasons.push("Quizzes < 1m");
+    }
+
+    // 4. 3+ lessons in < 10 min
+    // Check sequences of 3 lessons
+    const sortedLessons = [...course.lessons].sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+    let fastSequence = false;
+    for (let i = 0; i <= sortedLessons.length - 3; i++) {
+      const start = new Date(sortedLessons[i].startedAt).getTime();
+      const end = new Date(sortedLessons[i+2].finishedAt || sortedLessons[i+2].startedAt).getTime();
+      if ((end - start) < 10 * 60 * 1000) {
+        fastSequence = true;
+        break;
+      }
+    }
+    if (fastSequence) {
+      redFlags++;
+      reasons.push("3+ lessons in < 10m");
+    }
+
+    // 5. Entire course completed in < 30 min
+    if (course.isCompleted && course.durationMinutes !== undefined && course.durationMinutes < 30) {
+      redFlags++;
+      reasons.push("Course < 30m");
+    }
+
+    if (redFlags >= 3) {
       return {
-        level: (fastLessons.length + fastQuizzes.length) > 3 ? "High" : "Moderate",
-        reason: `${fastLessons.length} fast lessons, ${fastQuizzes.length} fast quizzes`
+        status: "Rushing",
+        level: redFlags >= 4 ? "High Risk" : "Moderate",
+        reason: reasons.join(", "),
+        color: "text-destructive",
+        bg: "bg-destructive/10",
+        border: "border-destructive/20"
       };
     }
-    return null;
+
+    // Engaged check
+    const engagedLessons = course.lessons.filter((l: any) => l.lessonDurationMinutes >= 5 && l.lessonDurationMinutes <= 20).length;
+    const engagedQuizzes = quizzes.filter((q: any) => q.durationMinutes >= 2 && q.durationMinutes <= 10).length;
+    const multiDay = (course.activeDays || 0) > 1;
+
+    if (engagedLessons > 0 || engagedQuizzes > 0 || multiDay) {
+      return {
+        status: "Engaged",
+        level: "Healthy",
+        reason: multiDay ? "Multi-day learning" : "Good lesson depth",
+        color: "text-blue-600",
+        bg: "bg-blue-500/10",
+        border: "border-blue-500/20"
+      };
+    }
+
+    return {
+      status: "Steady",
+      level: "Normal",
+      color: "text-green-600",
+      bg: "bg-green-500/10",
+      border: "border-green-500/20"
+    };
   };
 
   const formatDays = (days: number | undefined) => {
@@ -146,25 +212,16 @@ export default function StudentDetailsPage() {
                           </CardContent>
                         </Card>
                         {(() => {
-                          const rushing = getRushingStatus(course);
-                          return rushing ? (
-                            <Card className="border-none bg-destructive/10 shadow-sm hover:shadow-md transition-all">
+                          const pace = getPaceStatus(course);
+                          return (
+                            <Card className={`border-none ${pace.bg} shadow-sm hover:shadow-md transition-all`}>
                               <CardContent className="pt-6 text-center">
-                                <div className="h-10 w-10 rounded-lg bg-destructive/20 flex items-center justify-center mx-auto mb-3">
-                                  <BookOpen className="h-5 w-5 text-destructive" />
+                                <div className={`h-10 w-10 rounded-lg ${pace.bg.replace('/10', '/20')} flex items-center justify-center mx-auto mb-3`}>
+                                  <Activity className={`h-5 w-5 ${pace.color}`} />
                                 </div>
-                                <div className="text-[10px] font-bold text-destructive uppercase tracking-wider mb-1">Pace Alert</div>
-                                <div className="text-2xl font-bold text-destructive">{rushing.level}</div>
-                              </CardContent>
-                            </Card>
-                          ) : (
-                            <Card className="border-none bg-green-500/10 shadow-sm hover:shadow-md transition-all">
-                              <CardContent className="pt-6 text-center">
-                                <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center mx-auto mb-3">
-                                  <BookOpen className="h-5 w-5 text-green-600" />
-                                </div>
-                                <div className="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">Pace</div>
-                                <div className="text-2xl font-bold text-green-600 text-center">Healthy</div>
+                                <div className={`text-[10px] font-bold ${pace.color} uppercase tracking-wider mb-1`}>Pace: {pace.status}</div>
+                                <div className={`text-2xl font-bold ${pace.color}`}>{pace.level}</div>
+                                {pace.reason && <div className={`text-[8px] ${pace.color} opacity-70 mt-1 truncate px-2`}>{pace.reason}</div>}
                               </CardContent>
                             </Card>
                           );
