@@ -43,6 +43,7 @@ export default function StudentDetailsPage() {
     let redFlags = 0;
     const reasons: string[] = [];
 
+    // --- Rushing Criteria (3+ flags = Rushing) ---
     // 1. Lesson time < 2 min
     const veryFastLessons = course.lessons.filter((l: any) => l.isFinished && l.lessonDurationMinutes !== undefined && l.lessonDurationMinutes < 2);
     if (veryFastLessons.length > 0) {
@@ -99,7 +100,10 @@ export default function StudentDetailsPage() {
       };
     }
 
-    // Engaged check
+    // --- Engaged Criteria ---
+    // - Lesson time 5–20 min
+    // - Quiz time 2–10 min
+    // - Activity spread across multiple days
     const engagedLessons = course.lessons.filter((l: any) => l.lessonDurationMinutes >= 5 && l.lessonDurationMinutes <= 20).length;
     const engagedQuizzes = quizzes.filter((q: any) => q.durationMinutes >= 2 && q.durationMinutes <= 10).length;
     const multiDay = (course.activeDays || 0) > 1;
