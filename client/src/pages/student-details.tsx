@@ -299,8 +299,10 @@ export default function StudentDetailsPage() {
                                             <div className="h-5 w-5 rounded-full bg-green-500/10 flex items-center justify-center">
                                               <CheckCircle2 className="h-3 w-3 text-green-600" />
                                             </div>
-                                            {q.durationMinutes !== undefined && q.durationMinutes !== null && !isNaN(q.durationMinutes) ? (
+                                            {q.isSubmitted && q.durationMinutes !== undefined && q.durationMinutes !== null && !isNaN(q.durationMinutes) ? (
                                               <span>Took {formatDuration(q.durationMinutes)}</span>
+                                            ) : q.isSubmitted ? (
+                                              <span>Submitted</span>
                                             ) : (
                                               <span className="text-muted-foreground italic text-xs">Still in progress or data missing</span>
                                             )}
