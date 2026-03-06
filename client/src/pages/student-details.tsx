@@ -385,7 +385,7 @@ export default function StudentDetailsPage() {
                               </div>
                               {course.enrolledAt && (
                                 <div className="text-[10px] font-medium text-muted-foreground/70">
-                                  Enrolled on {format(new Date(course.enrolledAt), "PPP")}
+                                  Enrolled on {format(new Date(course.enrolledAt), "MMM d, yyyy HH:mm")}
                                 </div>
                               )}
                             </div>
