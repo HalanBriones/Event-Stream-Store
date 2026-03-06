@@ -159,6 +159,7 @@ export class DatabaseStorage implements IStorage {
       return {
         courseId,
         isCompleted: !!completionEvent || (lessons.length > 0 && lessons.every(l => l.isFinished)),
+        enrolledAt: enrollmentEvent?.timestamp.toISOString(),
         durationMinutes: courseDurationMinutes,
         gapEnrollmentToFirstLessonMinutes,
         activeDays,

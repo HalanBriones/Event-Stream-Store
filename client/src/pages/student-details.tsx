@@ -373,17 +373,24 @@ export default function StudentDetailsPage() {
               <AccordionItem key={course.courseId} value={`course-${course.courseId}`} className="border-none rounded-2xl px-6 bg-background shadow-sm overflow-hidden">
                 <AccordionTrigger className="hover:no-underline py-6">
                   <div className="flex items-center justify-between w-full pr-4">
-                    <div className="flex items-center gap-4">
-                      <div className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-colors ${course.isCompleted ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                        {course.isCompleted ? <GraduationCap className="h-6 w-6" /> : <Clock className="h-6 w-6" />}
-                      </div>
-                      <div className="text-left">
-                        <div className="text-lg font-bold">Course {course.courseId}</div>
-                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-tight">
-                          {course.isCompleted ? `Verified Completion • ${course.durationMinutes}m` : 'Status: Active Participation'}
+                        <div className="flex items-center gap-4">
+                          <div className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-colors ${course.isCompleted ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
+                            {course.isCompleted ? <GraduationCap className="h-6 w-6" /> : <Clock className="h-6 w-6" />}
+                          </div>
+                          <div className="text-left">
+                            <div className="text-lg font-bold">Course {course.courseId}</div>
+                            <div className="flex flex-col gap-0.5">
+                              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+                                {course.isCompleted ? `Verified Completion • ${course.durationMinutes}m` : 'Status: Active Participation'}
+                              </div>
+                              {course.enrolledAt && (
+                                <div className="text-[10px] font-medium text-muted-foreground/70">
+                                  Enrolled on {format(new Date(course.enrolledAt), "PPP")}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pb-8">
