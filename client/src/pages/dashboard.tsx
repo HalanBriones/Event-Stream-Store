@@ -200,9 +200,15 @@ export default function Dashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-                        Active
-                      </span>
+                      {student.enrolledCount > student.completedCount ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                          No Active Courses
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">

@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 export interface IStorage {
   createEvent(event: InsertEvent): Promise<Event>;
   getEvents(): Promise<Event[]>;
-  getStudentsWithStats(): Promise<{ userId: number; enrolledCount: number }[]>;
+  getStudentsWithStats(): Promise<{ userId: number; enrolledCount: number; completedCount: number }[]>;
   getStudentStats(userId: number): Promise<{
     enrolledCourses: number;
     completedCourses: number;
@@ -23,28 +23,60 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(events).orderBy(events.timestamp);
   }
 
-  async getStudentsWithStats(): Promise<{ userId: number; enrolledCount: number }[]> {
+  async getStudentsWithStats(): Promise<{ userId: number; enrolledCount: number; completedCount: number }[]> {
     const allEvents = await db.select().from(events);
-    const studentMap = new Map<number, Set<number>>();
+    const studentMap = new Map<number, { enrolled: Set<number>; completed: Set<number> }>();
 
     // Identify all unique users from any event
     allEvents.forEach(e => {
       if (!studentMap.has(e.userId)) {
-        studentMap.set(e.userId, new Set());
+        studentMap.set(e.userId, { enrolled: new Set(), completed: new Set() });
       }
     });
 
-    // Count distinct course_id where event_type = 'course_enrollment'
+    // Track enrolled and completed courses
     allEvents.forEach(e => {
+      const student = studentMap.get(e.userId)!;
+      
       if (e.eventType === 'course_enrollment') {
-        studentMap.get(e.userId)!.add(e.courseId);
+        student.enrolled.add(e.courseId);
+      }
+      
+      if (e.eventType === 'course_ended') {
+        student.completed.add(e.courseId);
       }
     });
+
+    // For courses that don't have explicit course_ended event, check if all lessons are finished
+    const studentStats: { userId: number; enrolled: Set<number>; completed: Set<number> }[] = Array.from(studentMap.values());
+    for (const userId of studentMap.keys()) {
+      const userEvents = allEvents.filter(e => e.userId === userId);
+      const student = studentMap.get(userId)!;
+      
+      for (const courseId of student.enrolled) {
+        if (!student.completed.has(courseId)) {
+          const courseEvents = userEvents.filter(e => e.courseId === courseId);
+          const lessons = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!)));
+          
+          if (lessons.length > 0) {
+            const allLessonsFinished = lessons.every(lessonId => 
+              courseEvents.some(e => e.lessonId === lessonId && e.eventType === 'lesson_finished') ||
+              courseEvents.some(e => e.lessonId === lessonId && e.eventType === 'quiz_submitted')
+            );
+            
+            if (allLessonsFinished) {
+              student.completed.add(courseId);
+            }
+          }
+        }
+      }
+    }
 
     return Array.from(studentMap.entries())
-      .map(([userId, enrolledSet]) => ({
+      .map(([userId, stats]) => ({
         userId,
-        enrolledCount: enrolledSet.size
+        enrolledCount: stats.enrolled.size,
+        completedCount: stats.completed.size
       }))
       .sort((a, b) => a.userId - b.userId);
   }
