@@ -182,7 +182,7 @@ export default function Dashboard() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[100px] font-bold">ID</TableHead>
+                  <TableHead className="w-[100px] font-bold">Student ID</TableHead>
                   <TableHead className="font-bold">Status</TableHead>
                   <TableHead className="font-bold">Enrollments</TableHead>
                   <TableHead className="text-right font-bold">Report</TableHead>
