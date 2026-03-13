@@ -51,5 +51,23 @@ export async function registerRoutes(
     }
   });
 
+  app.get(api.events.courses.path, async (req, res) => {
+    try {
+      const courses = await storage.getCourses();
+      res.json(courses);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch courses" });
+    }
+  });
+
+  app.get(api.events.courseStats.path, async (req, res) => {
+    try {
+      const stats = await storage.getCourseStats(Number(req.params.id));
+      res.json(stats);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch course stats" });
+    }
+  });
+
   return httpServer;
 }

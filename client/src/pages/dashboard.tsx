@@ -155,18 +155,20 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground mt-1">Unique learners tracked</p>
             </CardContent>
           </Card>
-          <Card className="border-none shadow-sm bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-transparent">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-orange-600">
-                Courses Offered
-              </CardTitle>
-              <Database className="h-5 w-5 text-orange-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{uniqueCourses}</div>
-              <p className="text-xs text-muted-foreground mt-1">Distinct learning paths</p>
-            </CardContent>
-          </Card>
+          <Link href="/courses">
+            <Card className="border-none shadow-sm bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-transparent cursor-pointer hover:shadow-md hover:scale-[1.02] transition-all">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-orange-600">
+                  Courses Offered
+                </CardTitle>
+                <Database className="h-5 w-5 text-orange-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{uniqueCourses}</div>
+                <p className="text-xs text-muted-foreground mt-1">Click to explore courses →</p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         <Card className="border-none shadow-md overflow-hidden">

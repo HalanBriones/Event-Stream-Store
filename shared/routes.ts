@@ -36,6 +36,7 @@ export const api = {
         200: z.array(z.object({
           userId: z.number(),
           enrolledCount: z.number(),
+          completedCount: z.number(),
         })),
       },
     },
@@ -46,22 +47,29 @@ export const api = {
         200: z.object({
           enrolledCourses: z.number(),
           completedCourses: z.number(),
-          courses: z.array(z.object({
-            courseId: z.number(),
-            isCompleted: z.boolean(),
-            durationMinutes: z.number().optional(),
-            lessons: z.array(z.object({
-              lessonId: z.number(),
-              isFinished: z.boolean(),
-              finishedAt: z.string().optional()
-            })),
-            quizzes: z.array(z.object({
-              quizId: z.number(),
-              isSubmitted: z.boolean(),
-              submittedAt: z.string().optional()
-            }))
-          }))
+          courses: z.array(z.any()),
         }),
+      },
+    },
+    courses: {
+      method: 'GET' as const,
+      path: '/api/courses' as const,
+      responses: {
+        200: z.array(z.object({
+          courseId: z.number(),
+          totalEnrolled: z.number(),
+          totalCompleted: z.number(),
+          completionRate: z.number(),
+          totalLessons: z.number(),
+          lastActivityAt: z.string().optional(),
+        })),
+      },
+    },
+    courseStats: {
+      method: 'GET' as const,
+      path: '/api/courses/:id/stats' as const,
+      responses: {
+        200: z.any(),
       },
     },
   },
