@@ -1,7 +1,42 @@
-import { events, type InsertEvent, type Event, isCourseEnrollment, isCourseEnd, isLessonStart, isLessonFinish, isQuizStart, isQuizSubmit } from "@shared/schema";
+/**
+ * server/storage.ts
+ *
+ * Data access layer — the only file that talks directly to the database.
+ *
+ * All business logic that requires reading or writing events lives here.
+ * The Express routes in routes.ts call these methods; they never touch
+ * the database directly.
+ *
+ * Pattern overview:
+ *   - Most methods pull ALL relevant events in a single query, then compute
+ *     aggregates in JavaScript. This avoids complex SQL and keeps the logic
+ *     easy to follow and modify.
+ *   - Event-type comparisons always use the helper functions from schema.ts
+ *     (e.g. isLessonFinish, isQuizSubmit) so string variants are handled
+ *     in one place.
+ */
+
+import {
+  events,
+  type InsertEvent,
+  type Event,
+  isCourseEnrollment,
+  isCourseEnd,
+  isLessonStart,
+  isLessonFinish,
+  isQuizStart,
+  isQuizSubmit,
+} from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
+// ---------------------------------------------------------------------------
+// Storage interface
+//
+// Defines the contract that any storage implementation must satisfy.
+// Currently only DatabaseStorage exists, but having an interface makes it
+// trivial to add an in-memory or mock implementation for testing.
+// ---------------------------------------------------------------------------
 export interface IStorage {
   createEvent(event: InsertEvent): Promise<Event>;
   getEvents(): Promise<Event[]>;
@@ -11,40 +46,67 @@ export interface IStorage {
   getCourseStats(courseId: number): Promise<any>;
 }
 
+// ---------------------------------------------------------------------------
+// DatabaseStorage — production implementation backed by PostgreSQL via Drizzle
+// ---------------------------------------------------------------------------
 export class DatabaseStorage implements IStorage {
+
+  // ── createEvent ──────────────────────────────────────────────────────────
+  /** Inserts a single learning event into the database and returns the new row. */
   async createEvent(insertEvent: InsertEvent): Promise<Event> {
     const [event] = await db.insert(events).values(insertEvent).returning();
     return event;
   }
 
+  // ── getEvents ────────────────────────────────────────────────────────────
+  /** Returns every event in the database, ordered by timestamp ascending. */
   async getEvents(): Promise<Event[]> {
     return await db.select().from(events).orderBy(events.timestamp);
   }
 
+  // ── getStudentsWithStats ─────────────────────────────────────────────────
+  /**
+   * Builds a summary row for every unique student:
+   *   - enrolledCount  — number of distinct courses the student enrolled in
+   *   - completedCount — number of those courses they actually finished
+   *
+   * Completion is determined in two ways (whichever comes first):
+   *   1. An explicit course_ended event exists for that student+course pair.
+   *   2. Every lesson in the course has a lesson_finished OR quiz_submitted event.
+   */
   async getStudentsWithStats(): Promise<{ userId: number; enrolledCount: number; completedCount: number }[]> {
     const allEvents = await db.select().from(events);
+
+    // Build a map of userId → { enrolled: Set<courseId>, completed: Set<courseId> }
     const studentMap = new Map<number, { enrolled: Set<number>; completed: Set<number> }>();
 
+    // First pass: initialise an entry for every user seen in any event
     allEvents.forEach(e => {
       if (!studentMap.has(e.userId)) {
         studentMap.set(e.userId, { enrolled: new Set(), completed: new Set() });
       }
     });
 
+    // Second pass: populate enrolled and completed sets from explicit events
     allEvents.forEach(e => {
       const student = studentMap.get(e.userId)!;
       if (isCourseEnrollment(e.eventType)) student.enrolled.add(e.courseId);
       if (isCourseEnd(e.eventType))        student.completed.add(e.courseId);
     });
 
+    // Third pass: infer completion from lesson activity when no explicit end event exists
     for (const userId of studentMap.keys()) {
       const userEvents = allEvents.filter(e => e.userId === userId);
-      const student = studentMap.get(userId)!;
+      const student    = studentMap.get(userId)!;
 
       for (const courseId of student.enrolled) {
-        if (student.completed.has(courseId)) continue;
+        if (student.completed.has(courseId)) continue; // already marked complete
+
         const courseEvents = userEvents.filter(e => e.courseId === courseId);
-        const lessonIds = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!)));
+        const lessonIds    = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!)));
+
+        // Mark complete only if there is at least one lesson AND every lesson
+        // has either a finish event or a quiz submission
         if (lessonIds.length > 0) {
           const allDone = lessonIds.every(lessonId =>
             courseEvents.some(e => e.lessonId === lessonId && isLessonFinish(e.eventType)) ||
@@ -58,20 +120,39 @@ export class DatabaseStorage implements IStorage {
     return Array.from(studentMap.entries())
       .map(([userId, stats]) => ({
         userId,
-        enrolledCount: stats.enrolled.size,
-        completedCount: stats.completed.size
+        enrolledCount:  stats.enrolled.size,
+        completedCount: stats.completed.size,
       }))
       .sort((a, b) => a.userId - b.userId);
   }
 
+  // ── getStudentStats ──────────────────────────────────────────────────────
+  /**
+   * Returns a complete learning timeline for a single student.
+   *
+   * For each course the student enrolled in, the result includes:
+   *   - isCompleted / enrolledAt / durationMinutes
+   *   - activeDays — number of distinct calendar days with any activity
+   *   - gapEnrollmentToFirstLessonMinutes — delay before first lesson started
+   *   - lessons[] — each lesson with timing and quiz breakdown
+   *
+   * Duration fields:
+   *   - lessonDurationMinutes — time from lesson_started to lesson_finished
+   *     (or to the last quiz_submitted if there is no explicit finish event)
+   *   - durationDays — calendar days spanned (0 = same day)
+   *
+   * This data is consumed by the Student Details page and the Insights modal.
+   */
   async getStudentStats(userId: number) {
     const studentEvents = await db.select().from(events).where(eq(events.userId, userId));
 
+    // Collect all courses this student enrolled in
     const enrolledCourseIds = Array.from(
       new Set(studentEvents.filter(e => isCourseEnrollment(e.eventType)).map(e => e.courseId))
     );
 
     const courses = enrolledCourseIds.map(courseId => {
+      // All events for this student in this course, sorted chronologically
       const courseEvents = studentEvents
         .filter(e => e.courseId === courseId)
         .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
@@ -79,27 +160,35 @@ export class DatabaseStorage implements IStorage {
       const enrollmentEvent = courseEvents.find(e => isCourseEnrollment(e.eventType));
       const completionEvent = courseEvents.find(e => isCourseEnd(e.eventType));
 
+      // Build per-lesson objects
       const lessons = Array.from(
         new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))
       ).map(lessonId => {
         const startEvent  = courseEvents.find(e => e.lessonId === lessonId && isLessonStart(e.eventType));
         const finishEvent = courseEvents.find(e => e.lessonId === lessonId && isLessonFinish(e.eventType));
 
+        // Build per-quiz objects for this lesson
         const lessonQuizzes = Array.from(
           new Set(courseEvents.filter(e => e.lessonId === lessonId && e.quizId).map(e => e.quizId!))
         ).map(quizId => {
           const quizStartEvent = courseEvents.find(e => e.quizId === quizId && isQuizStart(e.eventType));
           const submitEvent    = courseEvents.find(e => e.quizId === quizId && isQuizSubmit(e.eventType));
 
+          // How long after the lesson started did the student open the quiz?
           let gapFromLessonStartMinutes: number | undefined;
-          if (startEvent && quizStartEvent && !isNaN(startEvent.timestamp.getTime()) && !isNaN(quizStartEvent.timestamp.getTime())) {
+          if (startEvent && quizStartEvent &&
+              !isNaN(startEvent.timestamp.getTime()) &&
+              !isNaN(quizStartEvent.timestamp.getTime())) {
             gapFromLessonStartMinutes = Math.round(
               (quizStartEvent.timestamp.getTime() - startEvent.timestamp.getTime()) / (1000 * 60)
             );
           }
 
+          // How long did the student spend on the quiz itself?
           let durationMinutes: number | undefined;
-          if (quizStartEvent && submitEvent && !isNaN(quizStartEvent.timestamp.getTime()) && !isNaN(submitEvent.timestamp.getTime())) {
+          if (quizStartEvent && submitEvent &&
+              !isNaN(quizStartEvent.timestamp.getTime()) &&
+              !isNaN(submitEvent.timestamp.getTime())) {
             durationMinutes = Math.round(
               (submitEvent.timestamp.getTime() - quizStartEvent.timestamp.getTime()) / (1000 * 60)
             );
@@ -109,30 +198,33 @@ export class DatabaseStorage implements IStorage {
             quizId,
             isSubmitted: !!submitEvent,
             submittedAt: submitEvent?.timestamp.toISOString(),
-            startedAt: quizStartEvent?.timestamp.toISOString(),
+            startedAt:   quizStartEvent?.timestamp.toISOString(),
             durationMinutes,
-            gapFromLessonStartMinutes
+            gapFromLessonStartMinutes,
           };
         });
 
+        // ── Lesson duration calculation ─────────────────────────────────
+        // End time = explicit lesson_finished, OR the latest quiz_submitted
+        // (some platforms record submission but not an explicit lesson end)
         let durationDays: number | undefined;
         let lessonDurationMinutes: number | undefined;
+
         if (startEvent) {
-          const endTimestamp =
-            finishEvent?.timestamp ||
-            (lessonQuizzes.length > 0
-              ? lessonQuizzes.reduce((latest, q) => {
-                  if (q.submittedAt) {
-                    const d = new Date(q.submittedAt);
-                    return !latest || d > latest ? d : latest;
-                  }
-                  return latest;
-                }, null as Date | null)
-              : null);
+          const latestQuizSubmit = lessonQuizzes
+            .filter(q => q.submittedAt)
+            .reduce((latest, q) => {
+              const d = new Date(q.submittedAt!);
+              return !latest || d > latest ? d : latest;
+            }, null as Date | null);
+
+          const endTimestamp = finishEvent?.timestamp || latestQuizSubmit;
 
           if (endTimestamp && !isNaN(endTimestamp.getTime())) {
-            const diffTime = endTimestamp.getTime() - startEvent.timestamp.getTime();
-            lessonDurationMinutes = Math.max(0, Math.round(diffTime / (1000 * 60)));
+            const diffMs = endTimestamp.getTime() - startEvent.timestamp.getTime();
+            lessonDurationMinutes = Math.max(0, Math.round(diffMs / (1000 * 60)));
+
+            // Count calendar-day span (0 = same day, 1 = next day, etc.)
             const startDate = new Date(startEvent.timestamp.getFullYear(), startEvent.timestamp.getMonth(), startEvent.timestamp.getDate());
             const endDate   = new Date(endTimestamp.getFullYear(), endTimestamp.getMonth(), endTimestamp.getDate());
             durationDays = Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
@@ -142,16 +234,19 @@ export class DatabaseStorage implements IStorage {
         return {
           lessonId,
           isFinished: !!finishEvent || lessonQuizzes.some(q => q.isSubmitted),
-          startedAt: startEvent?.timestamp.toISOString(),
+          startedAt:  startEvent?.timestamp.toISOString(),
           finishedAt:
             finishEvent?.timestamp.toISOString() ||
+            // Fall back to the latest quiz submission as the effective end time
             lessonQuizzes.sort((a, b) => (b.submittedAt?.localeCompare(a.submittedAt || "") || 0))[0]?.submittedAt,
           durationDays,
           lessonDurationMinutes,
-          quizzes: lessonQuizzes
+          quizzes: lessonQuizzes,
         };
       });
 
+      // ── Course duration calculation ─────────────────────────────────────
+      // Course end time = explicit course_ended event, OR the latest lesson finish
       const lastLessonFinish = lessons
         .filter(l => l.finishedAt)
         .sort((a, b) => new Date(b.finishedAt!).getTime() - new Date(a.finishedAt!).getTime())[0]
@@ -165,11 +260,13 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
+      // Sort lessons in chronological start order for display
       const sortedLessons = [...lessons].sort((a, b) => {
         if (!a.startedAt || !b.startedAt) return 0;
         return new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime();
       });
 
+      // How long did the student wait before starting their first lesson?
       const firstLessonStart = sortedLessons.length > 0 ? sortedLessons[0].startedAt : null;
       let gapEnrollmentToFirstLessonMinutes: number | undefined;
       if (enrollmentEvent && firstLessonStart) {
@@ -178,8 +275,10 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
+      // Count how many distinct calendar days had any activity
       const activeDays = new Set(courseEvents.map(e => e.timestamp.toDateString())).size;
 
+      // Quizzes that are not tied to a specific lesson (rare but possible)
       const orphanQuizzes = Array.from(
         new Set(courseEvents.filter(e => !e.lessonId && e.quizId).map(e => e.quizId!))
       ).map(quizId => {
@@ -187,35 +286,45 @@ export class DatabaseStorage implements IStorage {
         return {
           quizId,
           isSubmitted: !!submitEvent,
-          submittedAt: submitEvent?.timestamp.toISOString()
+          submittedAt: submitEvent?.timestamp.toISOString(),
         };
       });
 
       return {
         courseId,
+        // A course is considered complete if there is an explicit end event,
+        // OR every lesson has a finish/quiz-submit event
         isCompleted: !!completionEvent || (lessons.length > 0 && lessons.every(l => l.isFinished)),
-        enrolledAt: enrollmentEvent?.timestamp.toISOString(),
+        enrolledAt:  enrollmentEvent?.timestamp.toISOString(),
         durationMinutes: courseDurationMinutes,
         gapEnrollmentToFirstLessonMinutes,
         activeDays,
         lessons: sortedLessons,
-        quizzes: orphanQuizzes
+        quizzes: orphanQuizzes,
       };
     });
 
     return {
-      enrolledCourses: enrolledCourseIds.length,
+      enrolledCourses:  enrolledCourseIds.length,
       completedCourses: courses.filter(c => c.isCompleted).length,
-      courses
+      courses,
     };
   }
 
-  // ─── Course-level analytics ───────────────────────────────────────────────
-
+  // ── getCourses ───────────────────────────────────────────────────────────
+  /**
+   * Returns a high-level summary for every course that has at least one
+   * enrollment event:
+   *   - totalEnrolled  — distinct students who joined
+   *   - totalCompleted — students who finished (explicit or inferred)
+   *   - completionRate — percentage (0–100)
+   *   - totalLessons   — distinct lesson IDs seen across all students
+   *   - lastActivityAt — timestamp of the most recent event in the course
+   */
   async getCourses(): Promise<any[]> {
     const allEvents = await db.select().from(events);
 
-    // Courses are identified by their enrollment events
+    // Identify all courses by finding distinct courseIds from enrollment events
     const courseIds = Array.from(
       new Set(allEvents.filter(e => isCourseEnrollment(e.eventType)).map(e => e.courseId))
     );
@@ -224,12 +333,22 @@ export class DatabaseStorage implements IStorage {
       const courseEvents = allEvents.filter(e => e.courseId === courseId);
       const enrolledUsers = new Set(courseEvents.filter(e => isCourseEnrollment(e.eventType)).map(e => e.userId));
       const totalLessons  = new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!)).size;
-      const lastActivityAt = [...courseEvents].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0]?.timestamp.toISOString();
+      const lastActivityAt = [...courseEvents]
+        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0]
+        ?.timestamp.toISOString();
 
+      // Count completions using the same two-step logic as getStudentsWithStats
       let completedCount = 0;
       for (const userId of enrolledUsers) {
         const userCourseEvents = courseEvents.filter(e => e.userId === userId);
-        if (userCourseEvents.some(e => isCourseEnd(e.eventType))) { completedCount++; continue; }
+
+        // Step 1: explicit course_ended event
+        if (userCourseEvents.some(e => isCourseEnd(e.eventType))) {
+          completedCount++;
+          continue;
+        }
+
+        // Step 2: every lesson has a finish or quiz-submit event
         const lessonIds = Array.from(new Set(userCourseEvents.filter(e => e.lessonId).map(e => e.lessonId!)));
         if (lessonIds.length > 0 && lessonIds.every(lid =>
           userCourseEvents.some(e => e.lessonId === lid && isLessonFinish(e.eventType)) ||
@@ -239,27 +358,52 @@ export class DatabaseStorage implements IStorage {
 
       return {
         courseId,
-        totalEnrolled: enrolledUsers.size,
+        totalEnrolled:  enrolledUsers.size,
         totalCompleted: completedCount,
-        completionRate: enrolledUsers.size > 0 ? Math.round((completedCount / enrolledUsers.size) * 100) : 0,
+        completionRate: enrolledUsers.size > 0
+          ? Math.round((completedCount / enrolledUsers.size) * 100)
+          : 0,
         totalLessons,
-        lastActivityAt
+        lastActivityAt,
       };
     }).sort((a, b) => a.courseId - b.courseId);
   }
 
+  // ── getCourseStats ───────────────────────────────────────────────────────
+  /**
+   * Returns deep analytics for a single course:
+   *
+   *   Summary:
+   *     - totalEnrolled / totalCompleted / completionRate / avgDurationMinutes
+   *
+   *   lessons[] — one entry per distinct lessonId, aggregated across all students:
+   *     - totalStarted / totalFinished / completionRate / avgDurationMinutes
+   *     - quizzes[] — same aggregates per quizId within the lesson
+   *
+   *   students[] — one entry per enrolled student:
+   *     - isCompleted / durationMinutes / pace ("Rushing" | "Engaged" | "Steady")
+   *
+   * Pace classification uses the same 5-criterion rubric as the frontend
+   * (see getPaceStatus in student-details.tsx). 3 or more red flags = Rushing.
+   */
   async getCourseStats(courseId: number): Promise<any> {
     const courseEvents = await db.select().from(events).where(eq(events.courseId, courseId));
 
+    // All students who enrolled in this course
     const enrolledUserIds = Array.from(
       new Set(courseEvents.filter(e => isCourseEnrollment(e.eventType)).map(e => e.userId))
     );
 
-    // Determine which students completed the course
+    // ── Step 1: determine which students completed the course ─────────────
     const completedUserIds = new Set<number>();
     for (const userId of enrolledUserIds) {
       const userCourseEvents = courseEvents.filter(e => e.userId === userId);
-      if (userCourseEvents.some(e => isCourseEnd(e.eventType))) { completedUserIds.add(userId); continue; }
+
+      if (userCourseEvents.some(e => isCourseEnd(e.eventType))) {
+        completedUserIds.add(userId);
+        continue;
+      }
+
       const lessonIds = Array.from(new Set(userCourseEvents.filter(e => e.lessonId).map(e => e.lessonId!)));
       if (lessonIds.length > 0 && lessonIds.every(lid =>
         userCourseEvents.some(e => e.lessonId === lid && isLessonFinish(e.eventType)) ||
@@ -267,46 +411,54 @@ export class DatabaseStorage implements IStorage {
       )) completedUserIds.add(userId);
     }
 
-    // Aggregate per-lesson stats across all students
+    // ── Step 2: aggregate per-lesson stats across all students ────────────
     const allLessonIds = Array.from(
       new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))
     ).sort((a, b) => a - b);
 
     const lessons = allLessonIds.map(lessonId => {
       const lessonEvents = courseEvents.filter(e => e.lessonId === lessonId);
+
+      // Count unique students who started vs finished this lesson
       const startedUsers  = new Set(lessonEvents.filter(e => isLessonStart(e.eventType)).map(e => e.userId));
       const finishedUsers = new Set([
         ...lessonEvents.filter(e => isLessonFinish(e.eventType)).map(e => e.userId),
-        ...lessonEvents.filter(e => isQuizSubmit(e.eventType)).map(e => e.userId)
+        // A quiz submission also counts as finishing the lesson
+        ...lessonEvents.filter(e => isQuizSubmit(e.eventType)).map(e => e.userId),
       ]);
 
-      // Average lesson duration
+      // Average lesson duration: computed only for students who both started AND finished
       const durations: number[] = [];
       for (const userId of startedUsers) {
-        const ul = lessonEvents.filter(e => e.userId === userId);
+        const ul     = lessonEvents.filter(e => e.userId === userId);
         const start  = ul.find(e => isLessonStart(e.eventType));
         const finish = ul.find(e => isLessonFinish(e.eventType)) ||
           [...ul.filter(e => isQuizSubmit(e.eventType))].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+
         if (start && finish) {
           const mins = Math.round((finish.timestamp.getTime() - start.timestamp.getTime()) / (1000 * 60));
           if (mins >= 0) durations.push(mins);
         }
       }
       const avgDurationMinutes = durations.length > 0
-        ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+        ? Math.round(durations.reduce((sum, d) => sum + d, 0) / durations.length)
         : undefined;
 
-      // Quiz stats for this lesson
-      const quizIds = Array.from(new Set(lessonEvents.filter(e => e.quizId).map(e => e.quizId!))).sort((a, b) => a - b);
+      // Per-quiz aggregates for this lesson
+      const quizIds = Array.from(
+        new Set(lessonEvents.filter(e => e.quizId).map(e => e.quizId!))
+      ).sort((a, b) => a - b);
+
       const quizzes = quizIds.map(quizId => {
-        const qe = lessonEvents.filter(e => e.quizId === quizId);
+        const qe             = lessonEvents.filter(e => e.quizId === quizId);
         const startedCount   = new Set(qe.filter(e => isQuizStart(e.eventType)).map(e => e.userId)).size;
         const submittedCount = new Set(qe.filter(e => isQuizSubmit(e.eventType)).map(e => e.userId)).size;
 
+        // Average time from quiz_started to quiz_submitted
         const qDurations: number[] = [];
         for (const userId of new Set(qe.map(e => e.userId))) {
-          const uq = qe.filter(e => e.userId === userId);
-          const s = uq.find(e => isQuizStart(e.eventType));
+          const uq  = qe.filter(e => e.userId === userId);
+          const s   = uq.find(e => isQuizStart(e.eventType));
           const sub = uq.find(e => isQuizSubmit(e.eventType));
           if (s && sub) {
             const mins = Math.round((sub.timestamp.getTime() - s.timestamp.getTime()) / (1000 * 60));
@@ -316,131 +468,166 @@ export class DatabaseStorage implements IStorage {
 
         return {
           quizId,
-          totalStarted: startedCount,
-          totalSubmitted: submittedCount,
-          submissionRate: startedCount > 0 ? Math.round((submittedCount / startedCount) * 100) : 0,
+          totalStarted:    startedCount,
+          totalSubmitted:  submittedCount,
+          submissionRate:  startedCount > 0 ? Math.round((submittedCount / startedCount) * 100) : 0,
           avgDurationMinutes: qDurations.length > 0
-            ? Math.round(qDurations.reduce((a, b) => a + b, 0) / qDurations.length)
-            : undefined
+            ? Math.round(qDurations.reduce((sum, d) => sum + d, 0) / qDurations.length)
+            : undefined,
         };
       });
 
       return {
         lessonId,
-        totalStarted: startedUsers.size,
-        totalFinished: finishedUsers.size,
-        completionRate: startedUsers.size > 0 ? Math.round((finishedUsers.size / startedUsers.size) * 100) : 0,
+        totalStarted:    startedUsers.size,
+        totalFinished:   finishedUsers.size,
+        completionRate:  startedUsers.size > 0
+          ? Math.round((finishedUsers.size / startedUsers.size) * 100)
+          : 0,
         avgDurationMinutes,
-        quizzes
+        quizzes,
       };
     });
 
-    // Per-student summary with pace classification
+    // ── Step 3: per-student summary with pace classification ──────────────
+    //
+    // Pace rubric — same 5 criteria as the frontend (student-details.tsx):
+    //   🚨 3+ red flags → Rushing
+    //   📚 Engaged lesson/quiz times OR multi-day activity → Engaged
+    //   ✅ Otherwise → Steady
     const students = enrolledUserIds.map(userId => {
-      const uce = courseEvents.filter(e => e.userId === userId).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-      const enrollmentEvent  = uce.find(e => isCourseEnrollment(e.eventType));
-      const completionEvent  = uce.find(e => isCourseEnd(e.eventType));
-      const isCompleted      = completedUserIds.has(userId);
+      // All events for this student in this course, sorted oldest → newest
+      const uce = courseEvents
+        .filter(e => e.userId === userId)
+        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
+      const enrollmentEvent = uce.find(e => isCourseEnrollment(e.eventType));
+      const completionEvent = uce.find(e => isCourseEnd(e.eventType));
+      const isCompleted     = completedUserIds.has(userId);
+
+      // Total time from enrollment to the last event (or explicit completion)
       let durationMinutes: number | undefined;
       if (enrollmentEvent) {
         const endEvent = completionEvent || uce[uce.length - 1];
-        if (endEvent) durationMinutes = Math.round((endEvent.timestamp.getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60));
+        if (endEvent) {
+          durationMinutes = Math.round(
+            (endEvent.timestamp.getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60)
+          );
+        }
       }
 
-      // Pace classification — same criteria as frontend student-details.tsx
+      // ── Pace calculation ────────────────────────────────────────────────
       let redFlags = 0;
       const userLessonIds = Array.from(new Set(uce.filter(e => e.lessonId).map(e => e.lessonId!)));
 
-      // 1. Lesson time < 2 min
+      // Red flag 1: any lesson completed in under 2 minutes
       const veryFastLessons = userLessonIds.filter(lid => {
         const s = uce.find(e => e.lessonId === lid && isLessonStart(e.eventType));
         const f = uce.find(e => e.lessonId === lid && isLessonFinish(e.eventType)) ||
-          [...uce.filter(e => e.lessonId === lid && isQuizSubmit(e.eventType))].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+          [...uce.filter(e => e.lessonId === lid && isQuizSubmit(e.eventType))]
+            .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
         return s && f && (f.timestamp.getTime() - s.timestamp.getTime()) < 2 * 60 * 1000;
       });
       if (veryFastLessons.length > 0) redFlags++;
 
-      // 2. Quiz start gap < 30 sec
+      // Red flag 2: any quiz started within 30 seconds of the lesson starting
       const userQuizIds = Array.from(new Set(uce.filter(e => e.quizId).map(e => e.quizId!)));
       const fastGaps = userQuizIds.filter(qid => {
         const lessonId = uce.find(e => e.quizId === qid)?.lessonId;
         if (!lessonId) return false;
         const lStart = uce.find(e => e.lessonId === lessonId && isLessonStart(e.eventType));
         const qStart = uce.find(e => e.quizId === qid && isQuizStart(e.eventType));
-        return lStart && qStart && (qStart.timestamp.getTime() - lStart.timestamp.getTime()) < 30 * 1000;
+        return lStart && qStart &&
+          (qStart.timestamp.getTime() - lStart.timestamp.getTime()) < 30 * 1000;
       });
       if (fastGaps.length > 0) redFlags++;
 
-      // 3. Quiz time < 1 min
+      // Red flag 3: any quiz submitted in under 1 minute
       const fastQuizzes = userQuizIds.filter(qid => {
-        const s = uce.find(e => e.quizId === qid && isQuizStart(e.eventType));
+        const s   = uce.find(e => e.quizId === qid && isQuizStart(e.eventType));
         const sub = uce.find(e => e.quizId === qid && isQuizSubmit(e.eventType));
         return s && sub && (sub.timestamp.getTime() - s.timestamp.getTime()) < 60 * 1000;
       });
       if (fastQuizzes.length > 0) redFlags++;
 
-      // 4. 3+ lessons in < 10 min
+      // Red flag 4: 3 or more lessons started within any 10-minute window
       const sortedByStart = userLessonIds
         .map(lid => ({ lid, t: uce.find(e => e.lessonId === lid && isLessonStart(e.eventType))?.timestamp }))
-        .filter(x => x.t).sort((a, b) => a.t!.getTime() - b.t!.getTime());
+        .filter(x => x.t)
+        .sort((a, b) => a.t!.getTime() - b.t!.getTime());
+
       for (let i = 0; i <= sortedByStart.length - 3; i++) {
         const span = sortedByStart[i + 2].t!.getTime() - sortedByStart[i].t!.getTime();
         if (span < 10 * 60 * 1000) { redFlags++; break; }
       }
 
-      // 5. Entire course < 30 min
+      // Red flag 5: entire completed course finished in under 30 minutes
       if (isCompleted && durationMinutes !== undefined && durationMinutes < 30) redFlags++;
 
+      // Classify pace
       let pace = "Steady";
       if (redFlags >= 3) {
         pace = "Rushing";
       } else {
+        // Check for positive engagement signals
         const activeDays = new Set(uce.map(e => e.timestamp.toDateString())).size;
+
         const engagedLessons = userLessonIds.filter(lid => {
           const s = uce.find(e => e.lessonId === lid && isLessonStart(e.eventType));
           const f = uce.find(e => e.lessonId === lid && isLessonFinish(e.eventType));
           if (!s || !f) return false;
           const mins = (f.timestamp.getTime() - s.timestamp.getTime()) / (1000 * 60);
-          return mins >= 5 && mins <= 20;
+          return mins >= 5 && mins <= 20; // healthy lesson duration range
         }).length;
+
         const engagedQuizzes = userQuizIds.filter(qid => {
-          const s = uce.find(e => e.quizId === qid && isQuizStart(e.eventType));
+          const s   = uce.find(e => e.quizId === qid && isQuizStart(e.eventType));
           const sub = uce.find(e => e.quizId === qid && isQuizSubmit(e.eventType));
           if (!s || !sub) return false;
           const mins = (sub.timestamp.getTime() - s.timestamp.getTime()) / (1000 * 60);
-          return mins >= 2 && mins <= 10;
+          return mins >= 2 && mins <= 10; // healthy quiz duration range
         }).length;
+
         if (engagedLessons > 0 || engagedQuizzes > 0 || activeDays > 1) pace = "Engaged";
       }
 
       return {
         userId,
-        enrolledAt: enrollmentEvent?.timestamp.toISOString(),
+        enrolledAt:      enrollmentEvent?.timestamp.toISOString(),
         isCompleted,
         durationMinutes,
-        pace
+        pace,
       };
     }).sort((a, b) => a.userId - b.userId);
 
-    const completedDurations = students.filter(s => s.isCompleted && s.durationMinutes !== undefined).map(s => s.durationMinutes!);
+    // ── Step 4: aggregate final course-level numbers ──────────────────────
+    // Average duration is computed only over students who fully completed the course
+    const completedDurations = students
+      .filter(s => s.isCompleted && s.durationMinutes !== undefined)
+      .map(s => s.durationMinutes!);
+
     const avgDurationMinutes = completedDurations.length > 0
-      ? Math.round(completedDurations.reduce((a, b) => a + b, 0) / completedDurations.length)
+      ? Math.round(completedDurations.reduce((sum, d) => sum + d, 0) / completedDurations.length)
       : undefined;
 
-    const lastActivityAt = [...courseEvents].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0]?.timestamp.toISOString();
+    const lastActivityAt = [...courseEvents]
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0]
+      ?.timestamp.toISOString();
 
     return {
       courseId,
-      totalEnrolled: enrolledUserIds.length,
+      totalEnrolled:  enrolledUserIds.length,
       totalCompleted: completedUserIds.size,
-      completionRate: enrolledUserIds.length > 0 ? Math.round((completedUserIds.size / enrolledUserIds.length) * 100) : 0,
+      completionRate: enrolledUserIds.length > 0
+        ? Math.round((completedUserIds.size / enrolledUserIds.length) * 100)
+        : 0,
       avgDurationMinutes,
       lessons,
       students,
-      lastActivityAt
+      lastActivityAt,
     };
   }
 }
 
+// Export a singleton instance used by routes.ts
 export const storage = new DatabaseStorage();
