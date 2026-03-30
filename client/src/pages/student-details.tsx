@@ -27,6 +27,7 @@ import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, GraduationCap, Lightb
 import { format } from "date-fns";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { classifyPace } from "@shared/paceConfig";
 
 export default function StudentDetailsPage() {
   const { id } = useParams();
@@ -68,75 +69,19 @@ export default function StudentDetailsPage() {
   };
 
   // ---------------------------------------------------------------------------
-  // getPaceStatus — classifies a student's learning pace for a single course
+  // getPaceStatus — delegates to classifyPace() from shared/paceConfig.ts.
   //
-  // Classification is based solely on total course duration (enrollment → completion).
-  // Courses are expected to be completed within one day.
-  //
-  // Thresholds:
-  //   Rushing          — completed in < 1 hour
-  //   Light Engagement — completed in 1–2 hours
-  //   Normal           — completed in 2–3 hours  ← healthy target range
-  //   Slow             — completed in 3–4 hours
-  //   Struggling       — completed in > 4 hours
-  //   In Progress      — course not yet completed
+  // To change thresholds, add tiers, or rename labels, edit shared/paceConfig.ts.
+  // No changes are needed here.
   // ---------------------------------------------------------------------------
   const getPaceStatus = (course: any) => {
-    // Cannot classify pace until the course is completed
-    if (!course.isCompleted || course.durationMinutes === undefined) {
-      return {
-        status: "In Progress",
-        level:  "—",
-        color:  "text-muted-foreground",
-        bg:     "bg-muted/30",
-        border: "border-muted",
-      };
-    }
-
-    const hours = course.durationMinutes / 60;
-
-    if (hours < 1) {
-      return {
-        status: "Rushing",
-        level:  "< 1 hour",
-        color:  "text-destructive",
-        bg:     "bg-destructive/10",
-        border: "border-destructive/20",
-      };
-    }
-    if (hours <= 2) {
-      return {
-        status: "Light Engagement",
-        level:  "1–2 hours",
-        color:  "text-orange-600",
-        bg:     "bg-orange-500/10",
-        border: "border-orange-500/20",
-      };
-    }
-    if (hours <= 3) {
-      return {
-        status: "Normal",
-        level:  "2–3 hours",
-        color:  "text-green-600",
-        bg:     "bg-green-500/10",
-        border: "border-green-500/20",
-      };
-    }
-    if (hours <= 4) {
-      return {
-        status: "Slow",
-        level:  "3–4 hours",
-        color:  "text-blue-600",
-        bg:     "bg-blue-500/10",
-        border: "border-blue-500/20",
-      };
-    }
+    const tier = classifyPace(course.durationMinutes, course.isCompleted);
     return {
-      status: "Struggling",
-      level:  "> 4 hours",
-      color:  "text-purple-600",
-      bg:     "bg-purple-500/10",
-      border: "border-purple-500/20",
+      status: tier.label,
+      level:  tier.rangeLabel,
+      color:  tier.color,
+      bg:     tier.bg,
+      border: tier.border,
     };
   };
 

@@ -27,6 +27,7 @@ import {
   isQuizStart,
   isQuizSubmit,
 } from "@shared/schema";
+import { classifyPace } from "@shared/paceConfig";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
@@ -522,17 +523,10 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      // ── Pace classification (time-based) ───────────────────────────────
-      // Only classified once the course is completed and duration is known.
-      let pace = "In Progress";
-      if (isCompleted && durationMinutes !== undefined) {
-        const hours = durationMinutes / 60;
-        if (hours < 1)       pace = "Rushing";
-        else if (hours <= 2) pace = "Light Engagement";
-        else if (hours <= 3) pace = "Normal";
-        else if (hours <= 4) pace = "Slow";
-        else                 pace = "Struggling";
-      }
+      // ── Pace classification ─────────────────────────────────────────────
+      // Delegates to classifyPace() — edit shared/paceConfig.ts to change
+      // thresholds, add tiers, or rename labels. No other file needs updating.
+      const pace = classifyPace(durationMinutes, isCompleted).label;
 
       return {
         userId,
