@@ -35,22 +35,45 @@ import { format } from "date-fns";
 
 // ---------------------------------------------------------------------------
 // Visual configuration for each pace level
+//
+// Pace is determined by total course duration (enrollment → completion):
+//   Rushing          < 1 hour
+//   Light Engagement 1–2 hours
+//   Normal           2–3 hours  ← healthy target
+//   Slow             3–4 hours
+//   Struggling       > 4 hours
+//   In Progress      not yet completed
 // ---------------------------------------------------------------------------
 const paceConfig = {
-  Rushing: {
-    color:  "text-destructive",
-    bg:     "bg-destructive/10",
-    badge:  "bg-destructive/10 text-destructive border-destructive/20",
+  "Rushing": {
+    color: "text-destructive",
+    bg:    "bg-destructive/10",
+    badge: "bg-destructive/10 text-destructive border-destructive/20",
   },
-  Engaged: {
-    color:  "text-blue-600",
-    bg:     "bg-blue-500/10",
-    badge:  "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  "Light Engagement": {
+    color: "text-orange-600",
+    bg:    "bg-orange-500/10",
+    badge: "bg-orange-500/10 text-orange-600 border-orange-500/20",
   },
-  Steady: {
-    color:  "text-green-600",
-    bg:     "bg-green-500/10",
-    badge:  "bg-green-500/10 text-green-700 border-green-500/20",
+  "Normal": {
+    color: "text-green-600",
+    bg:    "bg-green-500/10",
+    badge: "bg-green-500/10 text-green-700 border-green-500/20",
+  },
+  "Slow": {
+    color: "text-blue-600",
+    bg:    "bg-blue-500/10",
+    badge: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  },
+  "Struggling": {
+    color: "text-purple-600",
+    bg:    "bg-purple-500/10",
+    badge: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  },
+  "In Progress": {
+    color: "text-muted-foreground",
+    bg:    "bg-muted/30",
+    badge: "bg-muted/30 text-muted-foreground border-muted",
   },
 };
 
@@ -93,9 +116,12 @@ export default function CourseDetailsPage() {
   }
 
   // Derive counts for each pace group from the students array
-  const rushingCount = stats?.students?.filter((s: any) => s.pace === 'Rushing').length ?? 0;
-  const engagedCount = stats?.students?.filter((s: any) => s.pace === 'Engaged').length ?? 0;
-  const steadyCount  = stats?.students?.filter((s: any) => s.pace === 'Steady').length ?? 0;
+  const rushingCount    = stats?.students?.filter((s: any) => s.pace === 'Rushing').length           ?? 0;
+  const lightCount      = stats?.students?.filter((s: any) => s.pace === 'Light Engagement').length   ?? 0;
+  const normalCount     = stats?.students?.filter((s: any) => s.pace === 'Normal').length             ?? 0;
+  const slowCount       = stats?.students?.filter((s: any) => s.pace === 'Slow').length               ?? 0;
+  const strugglingCount = stats?.students?.filter((s: any) => s.pace === 'Struggling').length         ?? 0;
+  const inProgressCount = stats?.students?.filter((s: any) => s.pace === 'In Progress').length        ?? 0;
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 md:p-8">
@@ -193,22 +219,25 @@ export default function CourseDetailsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {/* Three tiles: one per pace category */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Five tiles: one per pace category, plus In Progress for incomplete students */}
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
               {[
-                { label: "Engaged", count: engagedCount, ...paceConfig.Engaged },
-                { label: "Steady",  count: steadyCount,  ...paceConfig.Steady  },
-                { label: "Rushing", count: rushingCount, ...paceConfig.Rushing },
+                { label: "Rushing",          count: rushingCount,    ...paceConfig["Rushing"]          },
+                { label: "Light Engagement", count: lightCount,      ...paceConfig["Light Engagement"] },
+                { label: "Normal",           count: normalCount,     ...paceConfig["Normal"]           },
+                { label: "Slow",             count: slowCount,       ...paceConfig["Slow"]             },
+                { label: "Struggling",       count: strugglingCount, ...paceConfig["Struggling"]       },
+                { label: "In Progress",      count: inProgressCount, ...paceConfig["In Progress"]      },
               ].map(({ label, count, color, bg }) => (
-                <div key={label} className={`rounded-2xl ${bg} p-4 text-center`}>
-                  <div className={`text-3xl font-bold ${color}`}>{count}</div>
-                  <div className={`text-[10px] font-bold uppercase tracking-wider ${color} mt-1`}>{label}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                <div key={label} className={`rounded-2xl ${bg} p-3 text-center`}>
+                  <div className={`text-2xl font-bold ${color}`}>{count}</div>
+                  <div className={`text-[9px] font-bold uppercase tracking-wider ${color} mt-1 leading-tight`}>{label}</div>
+                  <div className="text-[9px] text-muted-foreground mt-0.5">
                     {/* Show percentage of total enrolled students */}
                     {stats?.totalEnrolled > 0
                       ? Math.round((count / stats.totalEnrolled) * 100)
                       : 0
-                    }% of students
+                    }%
                   </div>
                 </div>
               ))}

@@ -1,0 +1,12 @@
+First Prompt to consider learning time
+This system consider that the courses it should be done in one day, and there are 4 different behaviors consider
+1. Rushing:
+  Time to finish the course: < 1 hour
+2. Possibly fast/light engagement:
+  Time to finish the course: >= 1 hour and <=2 hour
+2. Normal(Healthy):
+  Time to finish the course: >= 2 hour and <=3 hour
+3. Slow(Acceptable)
+  Time to finish the course:>= 3 hour and <=4 hour
+4. Struggle/Distraction:
+  Time to finish the course: >4

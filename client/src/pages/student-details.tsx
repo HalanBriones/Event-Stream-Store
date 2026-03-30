@@ -70,126 +70,73 @@ export default function StudentDetailsPage() {
   // ---------------------------------------------------------------------------
   // getPaceStatus — classifies a student's learning pace for a single course
   //
-  // Returns one of three statuses:
-  //   "Rushing"  — 3 or more red flags detected (see criteria below)
-  //   "Engaged"  — positive engagement signals present
-  //   "Steady"   — no strong signals in either direction
+  // Classification is based solely on total course duration (enrollment → completion).
+  // Courses are expected to be completed within one day.
   //
-  // Red-flag criteria (each counts as 1 flag):
-  //   1. Any lesson completed in under 2 minutes
-  //   2. Any quiz started within 30 seconds of the lesson beginning
-  //   3. Any quiz submitted in under 1 minute
-  //   4. 3 or more lessons started within a 10-minute window
-  //   5. Entire completed course finished in under 30 minutes
-  //
-  // Engagement signals:
-  //   - At least one lesson took 5–20 minutes (healthy depth)
-  //   - At least one quiz took 2–10 minutes (thoughtful completion)
-  //   - Activity spread across more than one calendar day
+  // Thresholds:
+  //   Rushing          — completed in < 1 hour
+  //   Light Engagement — completed in 1–2 hours
+  //   Normal           — completed in 2–3 hours  ← healthy target range
+  //   Slow             — completed in 3–4 hours
+  //   Struggling       — completed in > 4 hours
+  //   In Progress      — course not yet completed
   // ---------------------------------------------------------------------------
   const getPaceStatus = (course: any) => {
-    // No lessons yet — cannot classify
-    if (!course.lessons || course.lessons.length === 0) {
+    // Cannot classify pace until the course is completed
+    if (!course.isCompleted || course.durationMinutes === undefined) {
       return {
-        status: "Steady", level: "Healthy",
-        color: "text-green-600", bg: "bg-green-500/10", border: "border-green-500/20",
+        status: "In Progress",
+        level:  "—",
+        color:  "text-muted-foreground",
+        bg:     "bg-muted/30",
+        border: "border-muted",
       };
     }
 
-    let redFlags = 0;
-    const reasons: string[] = []; // human-readable explanation shown in the UI
+    const hours = course.durationMinutes / 60;
 
-    // ── Red flag 1: lesson completed in under 2 minutes ──────────────────
-    const veryFastLessons = course.lessons.filter(
-      (l: any) => l.isFinished && l.lessonDurationMinutes !== undefined && l.lessonDurationMinutes < 2
-    );
-    if (veryFastLessons.length > 0) {
-      redFlags++;
-      reasons.push(`${veryFastLessons.length} lessons < 2m`);
-    }
-
-    // ── Red flag 2: quiz opened within 30 seconds of lesson start ────────
-    const quizzes    = course.lessons.flatMap((l: any) => l.quizzes || []);
-    const fastGaps   = quizzes.filter(
-      (q: any) => q.gapFromLessonStartMinutes !== undefined && q.gapFromLessonStartMinutes < 0.5
-    );
-    if (fastGaps.length > 0) {
-      redFlags++;
-      reasons.push("Quiz started too fast");
-    }
-
-    // ── Red flag 3: quiz submitted in under 1 minute ──────────────────────
-    const fastQuizzes = quizzes.filter(
-      (q: any) => q.isSubmitted && q.durationMinutes !== undefined && q.durationMinutes < 1
-    );
-    if (fastQuizzes.length > 0) {
-      redFlags++;
-      reasons.push("Quizzes < 1m");
-    }
-
-    // ── Red flag 4: 3+ lessons started within any 10-minute window ───────
-    // Sort lessons by start time, then check every consecutive triple
-    const sortedLessons = [...course.lessons].sort(
-      (a: any, b: any) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
-    );
-    let fastSequence = false;
-    for (let i = 0; i <= sortedLessons.length - 3; i++) {
-      const windowStart = new Date(sortedLessons[i].startedAt).getTime();
-      const windowEnd   = new Date(sortedLessons[i + 2].finishedAt || sortedLessons[i + 2].startedAt).getTime();
-      if ((windowEnd - windowStart) < 10 * 60 * 1000) {
-        fastSequence = true;
-        break;
-      }
-    }
-    if (fastSequence) {
-      redFlags++;
-      reasons.push("3+ lessons in < 10m");
-    }
-
-    // ── Red flag 5: completed entire course in under 30 minutes ──────────
-    if (course.isCompleted && course.durationMinutes !== undefined && course.durationMinutes < 30) {
-      redFlags++;
-      reasons.push("Course < 30m");
-    }
-
-    // ── Classify ──────────────────────────────────────────────────────────
-    if (redFlags >= 3) {
+    if (hours < 1) {
       return {
         status: "Rushing",
-        level:  redFlags >= 4 ? "High Risk" : "Moderate",
-        reason: reasons.join(", "),
+        level:  "< 1 hour",
         color:  "text-destructive",
         bg:     "bg-destructive/10",
         border: "border-destructive/20",
       };
     }
-
-    // Check for positive engagement signals
-    const engagedLessons = course.lessons.filter(
-      (l: any) => l.lessonDurationMinutes >= 5 && l.lessonDurationMinutes <= 20
-    ).length;
-    const engagedQuizzes = quizzes.filter(
-      (q: any) => q.durationMinutes >= 2 && q.durationMinutes <= 10
-    ).length;
-    const multiDay = (course.activeDays || 0) > 1;
-
-    if (engagedLessons > 0 || engagedQuizzes > 0 || multiDay) {
+    if (hours <= 2) {
       return {
-        status: "Engaged",
-        level:  "Healthy",
-        reason: multiDay ? "Multi-day learning" : "Good lesson depth",
+        status: "Light Engagement",
+        level:  "1–2 hours",
+        color:  "text-orange-600",
+        bg:     "bg-orange-500/10",
+        border: "border-orange-500/20",
+      };
+    }
+    if (hours <= 3) {
+      return {
+        status: "Normal",
+        level:  "2–3 hours",
+        color:  "text-green-600",
+        bg:     "bg-green-500/10",
+        border: "border-green-500/20",
+      };
+    }
+    if (hours <= 4) {
+      return {
+        status: "Slow",
+        level:  "3–4 hours",
         color:  "text-blue-600",
         bg:     "bg-blue-500/10",
         border: "border-blue-500/20",
       };
     }
-
     return {
-      status: "Steady",
-      level:  "Normal",
-      color:  "text-green-600",
-      bg:     "bg-green-500/10",
-      border: "border-green-500/20",
+      status: "Struggling",
+      level:  "> 4 hours",
+      color:  "text-purple-600",
+      bg:     "bg-purple-500/10",
+      border: "border-purple-500/20",
     };
   };
 

@@ -381,10 +381,10 @@ export class DatabaseStorage implements IStorage {
    *     - quizzes[] — same aggregates per quizId within the lesson
    *
    *   students[] — one entry per enrolled student:
-   *     - isCompleted / durationMinutes / pace ("Rushing" | "Engaged" | "Steady")
+   *     - isCompleted / durationMinutes / pace
    *
-   * Pace classification uses the same 5-criterion rubric as the frontend
-   * (see getPaceStatus in student-details.tsx). 3 or more red flags = Rushing.
+   * Pace is classified by total course duration:
+   *   Rushing (<1h) | Light Engagement (1–2h) | Normal (2–3h) | Slow (3–4h) | Struggling (>4h)
    */
   async getCourseStats(courseId: number): Promise<any> {
     const courseEvents = await db.select().from(events).where(eq(events.courseId, courseId));
@@ -491,10 +491,16 @@ export class DatabaseStorage implements IStorage {
 
     // ── Step 3: per-student summary with pace classification ──────────────
     //
-    // Pace rubric — same 5 criteria as the frontend (student-details.tsx):
-    //   🚨 3+ red flags → Rushing
-    //   📚 Engaged lesson/quiz times OR multi-day activity → Engaged
-    //   ✅ Otherwise → Steady
+    // Pace is determined solely by total course duration (enrollment → completion).
+    // Courses are expected to be completed within a single day.
+    //
+    // Thresholds:
+    //   Rushing          — completed in < 1 hour
+    //   Light Engagement — completed in 1–2 hours
+    //   Normal           — completed in 2–3 hours  ← healthy target range
+    //   Slow             — completed in 3–4 hours
+    //   Struggling       — completed in > 4 hours
+    //   In Progress      — course not yet completed (no classification possible)
     const students = enrolledUserIds.map(userId => {
       // All events for this student in this course, sorted oldest → newest
       const uce = courseEvents
@@ -516,79 +522,16 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      // ── Pace calculation ────────────────────────────────────────────────
-      let redFlags = 0;
-      const userLessonIds = Array.from(new Set(uce.filter(e => e.lessonId).map(e => e.lessonId!)));
-
-      // Red flag 1: any lesson completed in under 2 minutes
-      const veryFastLessons = userLessonIds.filter(lid => {
-        const s = uce.find(e => e.lessonId === lid && isLessonStart(e.eventType));
-        const f = uce.find(e => e.lessonId === lid && isLessonFinish(e.eventType)) ||
-          [...uce.filter(e => e.lessonId === lid && isQuizSubmit(e.eventType))]
-            .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
-        return s && f && (f.timestamp.getTime() - s.timestamp.getTime()) < 2 * 60 * 1000;
-      });
-      if (veryFastLessons.length > 0) redFlags++;
-
-      // Red flag 2: any quiz started within 30 seconds of the lesson starting
-      const userQuizIds = Array.from(new Set(uce.filter(e => e.quizId).map(e => e.quizId!)));
-      const fastGaps = userQuizIds.filter(qid => {
-        const lessonId = uce.find(e => e.quizId === qid)?.lessonId;
-        if (!lessonId) return false;
-        const lStart = uce.find(e => e.lessonId === lessonId && isLessonStart(e.eventType));
-        const qStart = uce.find(e => e.quizId === qid && isQuizStart(e.eventType));
-        return lStart && qStart &&
-          (qStart.timestamp.getTime() - lStart.timestamp.getTime()) < 30 * 1000;
-      });
-      if (fastGaps.length > 0) redFlags++;
-
-      // Red flag 3: any quiz submitted in under 1 minute
-      const fastQuizzes = userQuizIds.filter(qid => {
-        const s   = uce.find(e => e.quizId === qid && isQuizStart(e.eventType));
-        const sub = uce.find(e => e.quizId === qid && isQuizSubmit(e.eventType));
-        return s && sub && (sub.timestamp.getTime() - s.timestamp.getTime()) < 60 * 1000;
-      });
-      if (fastQuizzes.length > 0) redFlags++;
-
-      // Red flag 4: 3 or more lessons started within any 10-minute window
-      const sortedByStart = userLessonIds
-        .map(lid => ({ lid, t: uce.find(e => e.lessonId === lid && isLessonStart(e.eventType))?.timestamp }))
-        .filter(x => x.t)
-        .sort((a, b) => a.t!.getTime() - b.t!.getTime());
-
-      for (let i = 0; i <= sortedByStart.length - 3; i++) {
-        const span = sortedByStart[i + 2].t!.getTime() - sortedByStart[i].t!.getTime();
-        if (span < 10 * 60 * 1000) { redFlags++; break; }
-      }
-
-      // Red flag 5: entire completed course finished in under 30 minutes
-      if (isCompleted && durationMinutes !== undefined && durationMinutes < 30) redFlags++;
-
-      // Classify pace
-      let pace = "Steady";
-      if (redFlags >= 3) {
-        pace = "Rushing";
-      } else {
-        // Check for positive engagement signals
-        const activeDays = new Set(uce.map(e => e.timestamp.toDateString())).size;
-
-        const engagedLessons = userLessonIds.filter(lid => {
-          const s = uce.find(e => e.lessonId === lid && isLessonStart(e.eventType));
-          const f = uce.find(e => e.lessonId === lid && isLessonFinish(e.eventType));
-          if (!s || !f) return false;
-          const mins = (f.timestamp.getTime() - s.timestamp.getTime()) / (1000 * 60);
-          return mins >= 5 && mins <= 20; // healthy lesson duration range
-        }).length;
-
-        const engagedQuizzes = userQuizIds.filter(qid => {
-          const s   = uce.find(e => e.quizId === qid && isQuizStart(e.eventType));
-          const sub = uce.find(e => e.quizId === qid && isQuizSubmit(e.eventType));
-          if (!s || !sub) return false;
-          const mins = (sub.timestamp.getTime() - s.timestamp.getTime()) / (1000 * 60);
-          return mins >= 2 && mins <= 10; // healthy quiz duration range
-        }).length;
-
-        if (engagedLessons > 0 || engagedQuizzes > 0 || activeDays > 1) pace = "Engaged";
+      // ── Pace classification (time-based) ───────────────────────────────
+      // Only classified once the course is completed and duration is known.
+      let pace = "In Progress";
+      if (isCompleted && durationMinutes !== undefined) {
+        const hours = durationMinutes / 60;
+        if (hours < 1)       pace = "Rushing";
+        else if (hours <= 2) pace = "Light Engagement";
+        else if (hours <= 3) pace = "Normal";
+        else if (hours <= 4) pace = "Slow";
+        else                 pace = "Struggling";
       }
 
       return {
