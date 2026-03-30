@@ -15,6 +15,8 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
+import { db } from "./db";
+import { events } from "@shared/schema";
 
 /**
  * Attaches all API route handlers to the Express application.
@@ -108,6 +110,22 @@ export async function registerRoutes(
       res.json(stats);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch course stats" });
+    }
+  });
+
+  // ── DELETE /api/admin/clear-events ──────────────────────────────────────
+  // TEMPORARY one-use endpoint — removes all rows from the events table.
+  // Protected by a secret token. To be deleted immediately after use.
+  app.delete("/api/admin/clear-events", async (req, res) => {
+    const SECRET = "clear-a8f2d1e9-prod-2026";
+    if (req.query.token !== SECRET) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    try {
+      await db.delete(events);
+      res.json({ message: "All events deleted successfully." });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete events" });
     }
   });
 
