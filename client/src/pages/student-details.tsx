@@ -431,54 +431,54 @@ export default function StudentDetailsPage() {
                 </AccordionTrigger>
 
                 {/* Expanded lesson list for this course */}
-                <AccordionContent className="pb-8">
-                  <div className="space-y-6 pt-2">
+                <AccordionContent className="pb-6">
+                  {/* Column labels */}
+                  {course.lessons?.length > 0 && (
+                    <div className="grid grid-cols-[1fr_auto] gap-4 px-2 py-2 border-b border-border mb-0">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lesson</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-right pr-2">Timeline</span>
+                    </div>
+                  )}
+
+                  <div className="divide-y divide-border">
                     {course.lessons?.map((lesson: any) => (
-                      <div
-                        key={lesson.lessonId}
-                        className="border border-muted/50 rounded-2xl p-6 space-y-6 bg-muted/20 hover:bg-muted/30 transition-colors group"
-                      >
-                        {/* Lesson header */}
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div key={lesson.lessonId} className="hover:bg-muted/30 transition-colors">
+                        {/* Lesson header row */}
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2 py-4">
                           <div className="flex items-center gap-3">
-                            {/* Checkmark if finished, empty circle if not */}
-                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${
+                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
                               lesson.isFinished
                                 ? 'bg-green-500/10 text-green-600'
                                 : 'bg-muted text-muted-foreground'
                             }`}>
                               {lesson.isFinished
-                                ? <CheckCircle2 className="h-5 w-5" />
-                                : <Circle className="h-5 w-5" />
+                                ? <CheckCircle2 className="h-4 w-4" />
+                                : <Circle className="h-4 w-4" />
                               }
                             </div>
                             <div>
-                              <h3 className="font-bold text-lg">Lesson {lesson.lessonId}</h3>
-                              <p className="text-xs font-medium text-muted-foreground">
-                                Session breakdown & assessment results
-                              </p>
+                              <div className="font-semibold text-sm">Lesson {lesson.lessonId}</div>
+                              <div className="text-[10px] font-medium text-muted-foreground">
+                                {lesson.isFinished ? 'Completed' : lesson.startedAt ? 'In Progress' : 'Not started'}
+                              </div>
                             </div>
                           </div>
 
-                          {/* Start/end time + duration */}
-                          <div className="bg-background/80 border px-4 py-2 rounded-xl text-right shadow-sm group-hover:border-primary/30 transition-colors">
-                            <div className="text-[10px] font-black text-muted-foreground uppercase mb-0.5">
-                              Timeline Info
-                            </div>
+                          {/* Timeline info */}
+                          <div className="text-right">
                             {lesson.startedAt ? (
-                              <div className="text-xs font-bold">
+                              <div className="text-xs font-semibold">
                                 Started: {format(new Date(lesson.startedAt), "MMM d, HH:mm")}
                               </div>
                             ) : (
-                              <div className="text-xs font-bold text-destructive italic">Not started yet</div>
+                              <div className="text-xs text-muted-foreground italic">Not started yet</div>
                             )}
                             {lesson.isFinished ? (
-                              <div className="font-black text-primary text-xs mt-1">
-                                Completed in: {(() => {
+                              <div className="text-xs font-bold text-primary mt-0.5">
+                                Duration: {(() => {
                                   const mins = lesson.lessonDurationMinutes;
                                   const days = lesson.durationDays;
                                   const finalMins = (mins !== undefined && mins !== null && !isNaN(mins)) ? mins : 0;
-                                  // Show days if the lesson spanned multiple calendar days
                                   if (days > 0) {
                                     const h = Math.floor((finalMins % 1440) / 60);
                                     const m = finalMins % 60;
@@ -489,47 +489,39 @@ export default function StudentDetailsPage() {
                                 })()}
                               </div>
                             ) : lesson.startedAt ? (
-                              <div className="text-[10px] text-orange-600 font-bold mt-1 uppercase">
-                                Currently In Progress
-                              </div>
+                              <div className="text-[10px] text-orange-600 font-bold mt-0.5 uppercase">In Progress</div>
                             ) : null}
                           </div>
                         </div>
 
-                        {/* Quiz results for this lesson (if any) */}
+                        {/* Quiz results — subsection with its own header */}
                         {lesson.quizzes?.length > 0 && (
-                          <div className="space-y-4">
-                            <div className="flex items-center gap-2">
-                              <div className="h-px flex-1 bg-muted" />
-                              <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-2">
-                                Assessment Performance
-                              </h4>
-                              <div className="h-px flex-1 bg-muted" />
+                          <div className="mx-2 mb-4 border border-border rounded-lg overflow-hidden">
+                            <div className="bg-muted/50 border-b border-border px-4 py-2 flex items-center gap-2">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                Assessment Results
+                              </span>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div className="divide-y divide-border">
                               {lesson.quizzes?.map((quiz: any) => (
                                 <div
                                   key={quiz.quizId}
-                                  className="bg-background border border-muted/60 p-4 rounded-xl shadow-sm hover:border-primary/20 transition-all"
+                                  className="flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors"
                                 >
-                                  <div className="flex items-center justify-between mb-3">
-                                    <span className="text-xs font-bold">Quiz #{quiz.quizId}</span>
-                                    {/* Submitted vs pending indicator */}
+                                  <span className="text-xs font-semibold">Quiz #{quiz.quizId}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {quiz.submittedAt
+                                        ? `Submitted ${format(new Date(quiz.submittedAt), "MMM d, HH:mm")}`
+                                        : 'Pending evaluation'
+                                      }
+                                    </span>
                                     {quiz.isSubmitted ? (
-                                      <div className="h-5 w-5 rounded-full bg-green-500/10 flex items-center justify-center">
-                                        <CheckCircle2 className="h-3 w-3 text-green-600" />
-                                      </div>
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
                                     ) : (
-                                      <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center">
-                                        <Circle className="h-3 w-3 text-muted-foreground" />
-                                      </div>
+                                      <Circle className="h-3.5 w-3.5 text-muted-foreground" />
                                     )}
-                                  </div>
-                                  <div className="text-[10px] text-muted-foreground font-semibold">
-                                    {quiz.submittedAt
-                                      ? `Submitted: ${format(new Date(quiz.submittedAt), "MMM d, HH:mm")}`
-                                      : 'Pending evaluation'
-                                    }
                                   </div>
                                 </div>
                               ))}
@@ -539,15 +531,11 @@ export default function StudentDetailsPage() {
                       </div>
                     ))}
 
-                    {/* Empty state for a course with no lesson activity */}
+                    {/* Empty state */}
                     {course.lessons?.length === 0 && course.quizzes?.length === 0 && (
-                      <div className="text-center py-12 bg-muted/20 rounded-2xl border-2 border-dashed border-muted">
-                        <p className="text-sm font-bold text-muted-foreground">
-                          No participation history found
-                        </p>
-                        <p className="text-xs text-muted-foreground/60 mt-1">
-                          Student has not engaged with this course content yet.
-                        </p>
+                      <div className="text-center py-10 text-muted-foreground">
+                        <p className="text-sm font-semibold">No participation history found</p>
+                        <p className="text-xs mt-1 text-muted-foreground/60">Student has not engaged with this course content yet.</p>
                       </div>
                     )}
                   </div>
