@@ -89,7 +89,7 @@ export default function CourseDetailsPage() {
   }));
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
+    <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
         {/* ── Breadcrumb + page header ──────────────────────────────────── */}
         <div>
@@ -111,7 +111,7 @@ export default function CourseDetailsPage() {
         {/* ── Top stat cards ─────────────────────────────────────────────── */}
         <div className="grid gap-4 md:grid-cols-4">
 
-          <Card className="border-none shadow-sm bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent">
+          <Card className="border border-border shadow-sm bg-background border-l-4 border-l-blue-500">
             <CardContent className="pt-5 pb-5">
               <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-1">Enrolled</div>
               <div className="flex items-center gap-2">
@@ -121,7 +121,7 @@ export default function CourseDetailsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm bg-gradient-to-br from-green-500/10 via-green-500/5 to-transparent">
+          <Card className="border border-border shadow-sm bg-background border-l-4 border-l-green-500">
             <CardContent className="pt-5 pb-5">
               <div className="text-[10px] font-bold uppercase tracking-wider text-green-600 mb-1">Completed</div>
               <div className="flex items-center gap-2">
@@ -131,8 +131,7 @@ export default function CourseDetailsPage() {
             </CardContent>
           </Card>
 
-          {/* Completion rate with a colour-coded progress bar */}
-          <Card className="border-none shadow-sm bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-transparent">
+          <Card className="border border-border shadow-sm bg-background border-l-4 border-l-orange-500">
             <CardContent className="pt-5 pb-5">
               <div className="text-[10px] font-bold uppercase tracking-wider text-orange-600 mb-1">Completion Rate</div>
               <div className="flex items-center gap-2">
@@ -153,8 +152,7 @@ export default function CourseDetailsPage() {
             </CardContent>
           </Card>
 
-          {/* Average duration — computed only over students who finished */}
-          <Card className="border-none shadow-sm bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent">
+          <Card className="border border-border shadow-sm bg-background border-l-4 border-l-purple-500">
             <CardContent className="pt-5 pb-5">
               <div className="text-[10px] font-bold uppercase tracking-wider text-purple-600 mb-1">Avg Duration</div>
               <div className="flex items-center gap-2">
@@ -166,18 +164,17 @@ export default function CourseDetailsPage() {
         </div>
 
         {/* ── Student pace breakdown ─────────────────────────────────────── */}
-        <Card className="border-none shadow-sm bg-background">
-          <CardHeader className="pb-4">
+        <Card className="border border-border shadow-sm overflow-hidden">
+          <CardHeader className="bg-muted/50 border-b border-border py-4 px-6">
             <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
-              <CardTitle className="text-base font-bold">Student Pace Breakdown</CardTitle>
+              <Activity className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-base font-semibold">Student Pace Breakdown</CardTitle>
             </div>
           </CardHeader>
-          <CardContent>
-            {/* One tile per pace tier — generated dynamically from shared/paceConfig.ts */}
+          <CardContent className="p-6">
             <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
               {allTiles.map(({ label, count, color, bg }) => (
-                <div key={label} className={`rounded-2xl ${bg} p-3 text-center`}>
+                <div key={label} className={`rounded-xl border ${bg} p-3 text-center`}>
                   <div className={`text-2xl font-bold ${color}`}>{count}</div>
                   <div className={`text-[9px] font-bold uppercase tracking-wider ${color} mt-1 leading-tight`}>{label}</div>
                   <div className="text-[9px] text-muted-foreground mt-0.5">
@@ -193,20 +190,20 @@ export default function CourseDetailsPage() {
         </Card>
 
         {/* ── Lesson breakdown accordion ────────────────────────────────── */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <BookOpen className="h-5 w-5 text-primary" />
+        <Card className="border border-border shadow-sm overflow-hidden">
+          <CardHeader className="bg-muted/50 border-b border-border py-4 px-6">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-base font-semibold">Lesson Breakdown</CardTitle>
             </div>
-            <h2 className="text-2xl font-bold">Lesson Breakdown</h2>
-          </div>
-
+          </CardHeader>
+          <CardContent className="p-6">
           <Accordion type="single" collapsible className="space-y-3">
             {stats?.lessons?.map((lesson: any) => (
               <AccordionItem
                 key={lesson.lessonId}
                 value={`lesson-${lesson.lessonId}`}
-                className="border-none rounded-2xl px-6 bg-background shadow-sm overflow-hidden"
+                className="border border-border rounded-xl px-6 bg-background overflow-hidden"
               >
                 {/* Lesson summary row */}
                 <AccordionTrigger className="hover:no-underline py-5">
@@ -318,85 +315,90 @@ export default function CourseDetailsPage() {
               </AccordionItem>
             ))}
           </Accordion>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* ── Enrolled students list ─────────────────────────────────────── */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-              <Users className="h-5 w-5 text-blue-600" />
+        <Card className="border border-border shadow-sm overflow-hidden">
+          <CardHeader className="bg-muted/50 border-b border-border py-4 px-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-muted-foreground" />
+                <CardTitle className="text-base font-semibold">Enrolled Students</CardTitle>
+              </div>
+              <span className="text-xs text-muted-foreground bg-background border border-border rounded-full px-2.5 py-1 font-medium">
+                {stats?.students?.length ?? 0} student{(stats?.students?.length ?? 0) !== 1 ? "s" : ""}
+              </span>
             </div>
-            <h2 className="text-2xl font-bold">Enrolled Students</h2>
+          </CardHeader>
+
+          {/* Column headers */}
+          <div className="grid grid-cols-12 gap-4 px-6 py-2.5 bg-muted/20 border-b border-border">
+            <span className="col-span-4 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Student</span>
+            <span className="col-span-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</span>
+            <span className="col-span-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Duration</span>
+            <span className="col-span-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Pace</span>
           </div>
 
-          <div className="space-y-3">
+          <div className="divide-y divide-border">
             {stats?.students?.map((student: any) => {
-              // Look up the colour config for this student's pace label
               const pc = paceConfig[student.pace as keyof typeof paceConfig] ?? paceConfig.Steady;
 
               return (
-                // Clicking a student row navigates to their full details page
-                <button
+                <div
                   key={student.userId}
+                  className="grid grid-cols-12 gap-4 items-center px-6 py-4 hover:bg-muted/30 cursor-pointer transition-colors group"
                   onClick={() => setLocation(`/student/${student.userId}`)}
-                  className="w-full text-left group"
                   data-testid={`card-student-${student.userId}`}
                 >
-                  <Card className="border-none shadow-sm bg-background hover:shadow-md hover:translate-x-0.5 transition-all overflow-hidden">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between gap-4">
-
-                        {/* Student identity */}
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-                            {student.userId}
-                          </div>
-                          <div>
-                            <div className="font-bold">Student #{student.userId}</div>
-                            {student.enrolledAt && (
-                              <div className="text-xs text-muted-foreground">
-                                Enrolled {format(new Date(student.enrolledAt), "MMM d, yyyy HH:mm")}
-                              </div>
-                            )}
-                          </div>
+                  {/* Student identity */}
+                  <div className="col-span-4 flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
+                      {student.userId}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm">Student #{student.userId}</div>
+                      {student.enrolledAt && (
+                        <div className="text-xs text-muted-foreground">
+                          Enrolled {format(new Date(student.enrolledAt), "MMM d, yyyy")}
                         </div>
+                      )}
+                    </div>
+                  </div>
 
-                        {/* Status, duration, and pace badge */}
-                        <div className="flex items-center gap-4">
-                          {/* Completion status */}
-                          <div className="hidden md:flex items-center gap-1.5">
-                            {student.isCompleted ? (
-                              <CheckCircle2 className="h-4 w-4 text-green-500" />
-                            ) : (
-                              <Clock className="h-4 w-4 text-orange-500" />
-                            )}
-                            <span className={`text-xs font-semibold ${student.isCompleted ? 'text-green-600' : 'text-orange-600'}`}>
-                              {student.isCompleted ? 'Completed' : 'In Progress'}
-                            </span>
-                          </div>
+                  {/* Status */}
+                  <div className="col-span-3">
+                    {student.isCompleted ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-green-500/10 text-green-700 border border-green-200">
+                        <CheckCircle2 className="h-3 w-3" /> Completed
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-orange-500/10 text-orange-700 border border-orange-200">
+                        <Clock className="h-3 w-3" /> In Progress
+                      </span>
+                    )}
+                  </div>
 
-                          {/* Total time spent in the course */}
-                          {student.durationMinutes !== undefined && (
-                            <div className="text-xs text-muted-foreground hidden md:block">
-                              {formatDuration(student.durationMinutes)}
-                            </div>
-                          )}
+                  {/* Duration */}
+                  <div className="col-span-2 text-sm text-muted-foreground">
+                    {student.durationMinutes !== undefined ? formatDuration(student.durationMinutes) : "—"}
+                  </div>
 
-                          {/* Colour-coded pace badge */}
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${pc.badge}`}>
-                            {student.pace}
-                          </span>
+                  {/* Pace badge */}
+                  <div className="col-span-2">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${pc.badge}`}>
+                      {student.pace}
+                    </span>
+                  </div>
 
-                          <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </button>
+                  <div className="col-span-1 flex justify-end">
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                </div>
               );
             })}
           </div>
-        </div>
+        </Card>
     </div>
   );
 }

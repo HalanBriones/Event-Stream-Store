@@ -97,7 +97,7 @@ export default function StudentDetailsPage() {
   // Page render
   // ---------------------------------------------------------------------------
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
+    <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
         {/* ── Breadcrumb + page header ──────────────────────────────────── */}
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
@@ -347,8 +347,8 @@ export default function StudentDetailsPage() {
         </div>
 
         {/* ── Summary stat cards ─────────────────────────────────────────── */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="border-none shadow-sm bg-background">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card className="border border-border shadow-sm bg-background border-l-4 border-l-primary">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                 Enrolled Courses
@@ -362,7 +362,7 @@ export default function StudentDetailsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm bg-background">
+          <Card className="border border-border shadow-sm bg-background border-l-4 border-l-green-500">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                 Completed Courses
@@ -371,7 +371,6 @@ export default function StudentDetailsPage() {
             <CardContent>
               <div className="text-4xl font-bold text-green-600">{stats?.completedCourses}</div>
               <div className="mt-2 h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                {/* Bar width = completion rate as a percentage */}
                 <div
                   className="h-full bg-green-500"
                   style={{ width: `${(stats?.completedCourses / stats?.enrolledCourses) * 100 || 0}%` }}
@@ -382,20 +381,20 @@ export default function StudentDetailsPage() {
         </div>
 
         {/* ── Curriculum Progress accordion ──────────────────────────────── */}
-        <div className="space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <BookOpen className="h-5 w-5 text-primary" />
+        <Card className="border border-border shadow-sm overflow-hidden">
+          <CardHeader className="bg-muted/50 border-b border-border py-4 px-6">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-base font-semibold">Curriculum Progress</CardTitle>
             </div>
-            <h2 className="text-2xl font-bold">Curriculum Progress</h2>
-          </div>
-
+          </CardHeader>
+          <CardContent className="p-6">
           <Accordion type="single" collapsible className="w-full space-y-4">
             {stats?.courses.map((course: any) => (
               <AccordionItem
                 key={course.courseId}
                 value={`course-${course.courseId}`}
-                className="border-none rounded-2xl px-6 bg-background shadow-sm overflow-hidden"
+                className="border border-border rounded-xl px-6 bg-background overflow-hidden"
               >
                 {/* Course row header */}
                 <AccordionTrigger className="hover:no-underline py-6">
@@ -556,7 +555,8 @@ export default function StudentDetailsPage() {
               </AccordionItem>
             ))}
           </Accordion>
-        </div>
+          </CardContent>
+        </Card>
     </div>
   );
 }
