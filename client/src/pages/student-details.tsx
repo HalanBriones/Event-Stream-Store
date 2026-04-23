@@ -449,6 +449,8 @@ export default function StudentDetailsPage() {
                             <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
                               lesson.isFinished
                                 ? 'bg-green-500/10 text-green-600'
+                                : lesson.startedAt
+                                ? 'bg-orange-500/10 text-orange-600'
                                 : 'bg-muted text-muted-foreground'
                             }`}>
                               {lesson.isFinished
@@ -458,7 +460,13 @@ export default function StudentDetailsPage() {
                             </div>
                             <div>
                               <div className="font-semibold text-sm">Lesson {lesson.lessonId}</div>
-                              <div className="text-[10px] font-medium text-muted-foreground">
+                              <div className={`text-[10px] font-medium ${
+                                lesson.isFinished
+                                  ? 'text-green-600'
+                                  : lesson.startedAt
+                                  ? 'text-orange-600 font-bold uppercase'
+                                  : 'text-muted-foreground'
+                              }`}>
                                 {lesson.isFinished ? 'Completed' : lesson.startedAt ? 'In Progress' : 'Not started'}
                               </div>
                             </div>
