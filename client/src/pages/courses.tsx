@@ -19,11 +19,10 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { api } from "@shared/routes";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, BookOpen, Users, CheckCircle2, Clock, ChevronRight, GraduationCap } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { BookOpen, Users, CheckCircle2, Clock, ChevronRight, GraduationCap } from "lucide-react";
 import { format } from "date-fns";
 
 export default function CoursesPage() {
@@ -45,29 +44,14 @@ export default function CoursesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
 
         {/* ── Page header ───────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between bg-background p-6 rounded-2xl shadow-sm border">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard">
-              <Button variant="outline" size="icon" className="rounded-full">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 text-[10px] font-bold uppercase tracking-wider">
-                  Course Catalog
-                </span>
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">Courses Offered</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {courses?.length ?? 0} courses in the system
-              </p>
-            </div>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Courses</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {courses?.length ?? 0} courses in the system
+          </p>
         </div>
 
         {/* ── Summary stat cards ─────────────────────────────────────────── */}
@@ -222,7 +206,6 @@ export default function CoursesPage() {
             </div>
           )}
         </div>
-      </div>
     </div>
   );
 }

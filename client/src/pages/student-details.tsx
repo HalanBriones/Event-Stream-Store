@@ -23,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, GraduationCap, Lightbulb, Activity } from "lucide-react";
+import { BookOpen, CheckCircle2, Circle, Clock, GraduationCap, Lightbulb, Activity } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -97,31 +97,24 @@ export default function StudentDetailsPage() {
   // Page render
   // ---------------------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-muted/30 p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
 
-        {/* ── Page header ───────────────────────────────────────────────── */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-background p-6 rounded-2xl shadow-sm border">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard">
-              <Button variant="outline" size="icon" className="rounded-full">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">
-                  Student Profile
-                </span>
-                <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
-                <span className="text-xs text-muted-foreground font-medium">ID: #{userId}</span>
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">Activity Report</h1>
+        {/* ── Breadcrumb + page header ──────────────────────────────────── */}
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+              <Link href="/dashboard" className="hover:text-foreground transition-colors cursor-pointer">
+                Dashboard
+              </Link>
+              <span>/</span>
+              <span className="text-foreground font-medium">Student #{userId}</span>
             </div>
+            <h1 className="text-2xl font-bold tracking-tight">Activity Report</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Student #{userId}</p>
           </div>
 
           {/* Insights modal trigger */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 mt-1">
             <Dialog open={isInsightsOpen} onOpenChange={setIsInsightsOpen}>
               <DialogTrigger asChild>
                 <Button
@@ -564,7 +557,6 @@ export default function StudentDetailsPage() {
             ))}
           </Accordion>
         </div>
-      </div>
     </div>
   );
 }

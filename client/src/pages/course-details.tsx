@@ -23,12 +23,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { api } from "@shared/routes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  ArrowLeft, BookOpen, Users, CheckCircle2, Clock,
+  BookOpen, Users, CheckCircle2, Clock,
   GraduationCap, Activity, ChevronRight, BarChart3,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -90,33 +89,23 @@ export default function CourseDetailsPage() {
   }));
 
   return (
-    <div className="min-h-screen bg-muted/30 p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
 
-        {/* ── Page header ───────────────────────────────────────────────── */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-background p-6 rounded-2xl shadow-sm border">
-          <div className="flex items-center gap-4">
-            <Link href="/courses">
-              <Button variant="outline" size="icon" className="rounded-full">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
+        {/* ── Breadcrumb + page header ──────────────────────────────────── */}
+        <div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+            <Link href="/courses" className="hover:text-foreground transition-colors cursor-pointer">
+              Courses
             </Link>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 text-[10px] font-bold uppercase tracking-wider">
-                  Course Insights
-                </span>
-                <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
-                <span className="text-xs text-muted-foreground font-medium">ID: #{courseId}</span>
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">Course {courseId}</h1>
-              {stats?.lastActivityAt && (
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Last activity: {format(new Date(stats.lastActivityAt), "MMM d, yyyy HH:mm")}
-                </p>
-              )}
-            </div>
+            <span>/</span>
+            <span className="text-foreground font-medium">Course {courseId}</span>
           </div>
+          <h1 className="text-2xl font-bold tracking-tight">Course {courseId}</h1>
+          {stats?.lastActivityAt && (
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Last activity: {format(new Date(stats.lastActivityAt), "MMM d, yyyy HH:mm")}
+            </p>
+          )}
         </div>
 
         {/* ── Top stat cards ─────────────────────────────────────────────── */}
@@ -408,7 +397,6 @@ export default function CourseDetailsPage() {
             })}
           </div>
         </div>
-      </div>
     </div>
   );
 }
