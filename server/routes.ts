@@ -111,5 +111,16 @@ export async function registerRoutes(
     }
   });
 
+  // ── DELETE /api/admin/clear-events ──────────────────────────────────────
+  // Wipes every row from the events table. Used by the dashboard admin button.
+  app.delete("/api/admin/clear-events", async (req, res) => {
+    try {
+      await storage.clearAllEvents();
+      res.json({ message: "All events cleared." });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to clear events" });
+    }
+  });
+
   return httpServer;
 }

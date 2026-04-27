@@ -1,14 +1,29 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Activity, Users, BookOpen, ChevronRight,
-  CheckCircle2, Clock, GraduationCap,
+  CheckCircle2, Clock, GraduationCap, Trash2,
 } from "lucide-react";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   const { data: events, isLoading: eventsLoading } = useQuery<any[]>({
     queryKey: [api.events.list.path],
@@ -16,6 +31,17 @@ export default function Dashboard() {
 
   const { data: students, isLoading: studentsLoading } = useQuery<any[]>({
     queryKey: [api.events.students.path],
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/admin/clear-events"),
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      toast({ title: "All events cleared", description: "The database has been wiped successfully." });
+    },
+    onError: () => {
+      toast({ title: "Failed to clear events", variant: "destructive" });
+    },
   });
 
   const isLoading = eventsLoading || studentsLoading;
@@ -36,11 +62,47 @@ export default function Dashboard() {
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
       {/* ── Page title ──────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Monitor student engagement and course progress
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Monitor student engagement and course progress
+          </p>
+        </div>
+
+        {/* Clear all events button */}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive gap-2"
+              data-testid="button-clear-events"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear All Events
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear all events?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete every event from the database — all students, courses,
+                lessons, and quiz data will be wiped. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-clear">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => clearMutation.mutate()}
+                data-testid="button-confirm-clear"
+              >
+                {clearMutation.isPending ? "Clearing…" : "Yes, clear everything"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* ── Stat cards ──────────────────────────────────────────────── */}
