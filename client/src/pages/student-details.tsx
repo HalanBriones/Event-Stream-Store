@@ -322,6 +322,13 @@ export default function StudentDetailsPage() {
                                               Logged at {format(new Date(q.submittedAt), "HH:mm")}
                                             </div>
                                           )}
+                                          {q.attempts !== null && q.attempts !== undefined && (
+                                            <div className="mt-2">
+                                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-600 border border-orange-200">
+                                                {q.attempts} attempt{q.attempts !== 1 ? "s" : ""}
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
                                       ))}
                                       {/* No quizzes for this lesson */}
