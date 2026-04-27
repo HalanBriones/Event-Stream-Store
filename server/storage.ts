@@ -26,6 +26,7 @@ import {
   isLessonFinish,
   isQuizStart,
   isQuizSubmit,
+  isQuizAttempts,
 } from "@shared/schema";
 import { classifyPace } from "@shared/paceConfig";
 import { db } from "./db";
@@ -196,6 +197,11 @@ export class DatabaseStorage implements IStorage {
             );
           }
 
+          // Pick up attempt count from a quiz_attempts event if present
+          const attemptsEvent = courseEvents.find(
+            e => e.quizId === quizId && isQuizAttempts(e.eventType)
+          );
+
           return {
             quizId,
             isSubmitted: !!submitEvent,
@@ -203,6 +209,7 @@ export class DatabaseStorage implements IStorage {
             startedAt:   quizStartEvent?.timestamp.toISOString(),
             durationMinutes,
             gapFromLessonStartMinutes,
+            attempts: attemptsEvent?.attempts ?? null,
           };
         });
 
