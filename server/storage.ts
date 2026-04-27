@@ -45,6 +45,7 @@ export interface IStorage {
   getStudentStats(userId: number): Promise<any>;
   getCourses(): Promise<any[]>;
   getCourseStats(courseId: number): Promise<any>;
+  clearAllEvents(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -563,6 +564,11 @@ export class DatabaseStorage implements IStorage {
       students,
       lastActivityAt,
     };
+  }
+
+  // ── clearAllEvents (TEMPORARY) ────────────────────────────────────────────
+  async clearAllEvents(): Promise<void> {
+    await db.delete(events);
   }
 }
 
