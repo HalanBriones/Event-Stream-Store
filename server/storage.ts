@@ -196,6 +196,12 @@ export class DatabaseStorage implements IStorage {
             );
           }
 
+          // Extract attempt count from metadata on any quiz event for this quiz
+          const allQuizEvents = courseEvents.filter(e => e.quizId === quizId);
+          const attemptsFromMetadata = allQuizEvents
+            .map(e => (e.metadata as any)?.attempts)
+            .find(a => a !== undefined && a !== null && typeof a === "number") ?? null;
+
           return {
             quizId,
             isSubmitted: !!submitEvent,
@@ -203,6 +209,7 @@ export class DatabaseStorage implements IStorage {
             startedAt:   quizStartEvent?.timestamp.toISOString(),
             durationMinutes,
             gapFromLessonStartMinutes,
+            attempts: attemptsFromMetadata,
           };
         });
 
