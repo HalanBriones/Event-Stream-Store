@@ -45,7 +45,6 @@ export interface IStorage {
   getStudentStats(userId: number): Promise<any>;
   getCourses(): Promise<any[]>;
   getCourseStats(courseId: number): Promise<any>;
-  clearAllEvents(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -566,10 +565,6 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  // ── clearAllEvents (TEMPORARY) ────────────────────────────────────────────
-  async clearAllEvents(): Promise<void> {
-    await db.delete(events);
-  }
 }
 
 // Export a singleton instance used by routes.ts

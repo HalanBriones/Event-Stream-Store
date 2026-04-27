@@ -111,17 +111,5 @@ export async function registerRoutes(
     }
   });
 
-  // ── TEMPORARY: DELETE /api/admin/clear-events ────────────────────────────
-  // One-time use: wipes all rows from the events table in production.
-  // REMOVE THIS ENDPOINT after use.
-  app.delete("/api/admin/clear-events", async (req, res) => {
-    try {
-      await storage.clearAllEvents();
-      res.json({ message: "All events cleared." });
-    } catch (err) {
-      res.status(500).json({ message: "Failed to clear events" });
-    }
-  });
-
   return httpServer;
 }
