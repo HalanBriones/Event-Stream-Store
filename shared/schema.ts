@@ -49,8 +49,6 @@ export const events = pgTable("events", {
   // lessonId and quizId are optional; course-level events don't need them
   lessonId:  integer("lesson_id"),
   quizId:    integer("quiz_id"),
-  // Number of attempts on a quiz (populated for quiz_attempts events)
-  attempts:  integer("attempts"),
   // Arbitrary extra data the upstream platform may send (stored as JSON)
   metadata:  jsonb("metadata"),
   // DB defaults to the current time if the caller doesn't supply a timestamp.
@@ -96,9 +94,8 @@ const LESSON_START_TYPES  = ["lesson_started", "lesson_start"];
 const LESSON_FINISH_TYPES = ["lesson_finished", "lesson_complete", "lesson_end"];
 
 // Quiz lifecycle
-const QUIZ_START_TYPES    = ["quiz_started", "quiz_start"];
-const QUIZ_SUBMIT_TYPES   = ["quiz_submitted", "quiz_submit"];
-const QUIZ_ATTEMPTS_TYPES = ["quiz_attempts", "quiz_attempt"];
+const QUIZ_START_TYPES  = ["quiz_started", "quiz_start"];
+const QUIZ_SUBMIT_TYPES = ["quiz_submitted", "quiz_submit"];
 
 /** Returns true when the event string represents a course enrollment. */
 export const isCourseEnrollment = (t: string): boolean => COURSE_ENROLLMENT_TYPES.includes(t);
@@ -117,9 +114,6 @@ export const isQuizStart        = (t: string): boolean => QUIZ_START_TYPES.inclu
 
 /** Returns true when the event string represents a quiz being submitted. */
 export const isQuizSubmit       = (t: string): boolean => QUIZ_SUBMIT_TYPES.includes(t);
-
-/** Returns true when the event string carries a quiz attempt count. */
-export const isQuizAttempts     = (t: string): boolean => QUIZ_ATTEMPTS_TYPES.includes(t);
 
 // Legacy type kept for backward compatibility with older parts of the codebase
 export type StudentWithStats = {

@@ -517,14 +517,7 @@ export default function StudentDetailsPage() {
                                   key={quiz.quizId}
                                   className="flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors"
                                 >
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-xs font-semibold">Quiz #{quiz.quizId}</span>
-                                    {quiz.attempts !== null && quiz.attempts !== undefined && (
-                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 border border-orange-200">
-                                        {quiz.attempts} attempt{quiz.attempts !== 1 ? "s" : ""}
-                                      </span>
-                                    )}
-                                  </div>
+                                  <span className="text-xs font-semibold">Quiz #{quiz.quizId}</span>
                                   <div className="flex items-center gap-2">
                                     <span className="text-[10px] text-muted-foreground">
                                       {quiz.submittedAt
