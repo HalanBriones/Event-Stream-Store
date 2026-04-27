@@ -322,10 +322,10 @@ export default function StudentDetailsPage() {
                                               Logged at {format(new Date(q.submittedAt), "HH:mm")}
                                             </div>
                                           )}
-                                          {q.attempts !== null && q.attempts !== undefined && (
+                                          {q.isSubmitted && (
                                             <div className="mt-2">
                                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-600 border border-orange-200">
-                                                {q.attempts} attempt{q.attempts !== 1 ? "s" : ""}
+                                                {(q.attempts ?? 1)} attempt{(q.attempts ?? 1) !== 1 ? "s" : ""}
                                               </span>
                                             </div>
                                           )}
@@ -526,9 +526,9 @@ export default function StudentDetailsPage() {
                                 >
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs font-semibold">Quiz #{quiz.quizId}</span>
-                                    {quiz.attempts !== null && quiz.attempts !== undefined && (
+                                    {quiz.isSubmitted && (
                                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-600 border border-orange-200">
-                                        {quiz.attempts} attempt{quiz.attempts !== 1 ? "s" : ""}
+                                        {(quiz.attempts ?? 1)} attempt{(quiz.attempts ?? 1) !== 1 ? "s" : ""}
                                       </span>
                                     )}
                                   </div>
