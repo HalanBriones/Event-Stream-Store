@@ -196,11 +196,22 @@ export class DatabaseStorage implements IStorage {
             );
           }
 
-          // Extract attempt count from metadata on any quiz event for this quiz
+          // Extract attempt count from metadata — prefer the quiz_submitted event
+          // since that's where attempts are most reliably recorded, then fall
+          // back to any other quiz event for this quiz.
+          // Accepts the value as a number OR a numeric string (e.g. "3" or 3).
           const allQuizEvents = courseEvents.filter(e => e.quizId === quizId);
-          const attemptsFromMetadata = allQuizEvents
+          const orderedQuizEvents = [
+            ...allQuizEvents.filter(e => isQuizSubmit(e.eventType)),
+            ...allQuizEvents.filter(e => !isQuizSubmit(e.eventType)),
+          ];
+          const rawAttempts = orderedQuizEvents
             .map(e => (e.metadata as any)?.attempts)
-            .find(a => a !== undefined && a !== null && typeof a === "number") ?? null;
+            .find(a => a !== undefined && a !== null);
+          const attemptsFromMetadata =
+            rawAttempts !== undefined && rawAttempts !== null && !isNaN(Number(rawAttempts))
+              ? Number(rawAttempts)
+              : null;
 
           return {
             quizId,
