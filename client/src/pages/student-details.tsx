@@ -390,7 +390,7 @@ export default function StudentDetailsPage() {
           </CardHeader>
           <CardContent className="p-6">
           <Accordion type="single" collapsible className="w-full space-y-4">
-            {stats?.courses.map((course: any) => (
+            {stats?.courses?.map((course: any) => (
               <AccordionItem
                 key={course.courseId}
                 value={`course-${course.courseId}`}
