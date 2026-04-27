@@ -526,11 +526,6 @@ export default function StudentDetailsPage() {
                                 >
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs font-semibold">Quiz #{quiz.quizId}</span>
-                                    {quiz.isSubmitted && (
-                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-600 border border-orange-200">
-                                        {(quiz.attempts ?? 1)} attempt{(quiz.attempts ?? 1) !== 1 ? "s" : ""}
-                                      </span>
-                                    )}
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <span className="text-[10px] text-muted-foreground">
