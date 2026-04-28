@@ -10,3 +10,14 @@ This system consider that the courses it should be done in one day, and there ar
   Time to finish the course:>= 3 hour and <=4 hour
 4. Struggle/Distraction:
   Time to finish the course: >4
+
+****First Prompt to consider Engagement of the course****
+
+****Next Improvements****
+Engagement signals
+- Number of sessions
+- Number of Interactions (clik on the links)
+- Idle time = When the course is open but no interaction or de student is not doing anything
+- Active time =  Time that the student is doing stuff or interacting with the course
+
+
