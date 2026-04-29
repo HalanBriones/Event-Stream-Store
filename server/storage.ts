@@ -3,40 +3,32 @@
  *
  * Data access layer — the only file that talks directly to the database.
  *
- * All business logic that requires reading or writing events lives here.
- * The Express routes in routes.ts call these methods; they never touch
- * the database directly.
- *
- * Pattern overview:
- *   - Most methods pull ALL relevant events in a single query, then compute
- *     aggregates in JavaScript. This avoids complex SQL and keeps the logic
- *     easy to follow and modify.
- *   - Event-type comparisons always use the helper functions from schema.ts
- *     (e.g. isLessonFinish, isQuizSubmit) so string variants are handled
- *     in one place.
+ * All aggregation and business logic is expressed as SQL queries that run
+ * inside PostgreSQL. No raw-event arrays are loaded into JavaScript memory
+ * for processing; every stat is computed by the database engine directly.
  */
 
 import {
   events,
   type InsertEvent,
   type Event,
-  isCourseEnrollment,
-  isCourseEnd,
-  isLessonStart,
-  isLessonFinish,
-  isQuizStart,
-  isQuizSubmit,
 } from "@shared/schema";
 import { classifyPace } from "@shared/paceConfig";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
+
+// ---------------------------------------------------------------------------
+// Constants — event-type strings that match the helper functions in schema.ts
+// ---------------------------------------------------------------------------
+const ENROLLMENT_TYPES  = `('course_enrollment', 'enrollment')`;
+const COURSE_END_TYPES  = `('course_ended', 'course_completed', 'course_end')`;
+const LESSON_START_TYPES  = `('lesson_started', 'lesson_start')`;
+const LESSON_FINISH_TYPES = `('lesson_finished', 'lesson_complete', 'lesson_end')`;
+const QUIZ_START_TYPES  = `('quiz_started', 'quiz_start')`;
+const QUIZ_SUBMIT_TYPES = `('quiz_submitted', 'quiz_submit')`;
 
 // ---------------------------------------------------------------------------
 // Storage interface
-//
-// Defines the contract that any storage implementation must satisfy.
-// Currently only DatabaseStorage exists, but having an interface makes it
-// trivial to add an in-memory or mock implementation for testing.
 // ---------------------------------------------------------------------------
 export interface IStorage {
   createEvent(event: InsertEvent): Promise<Event>;
@@ -49,283 +41,395 @@ export interface IStorage {
 }
 
 // ---------------------------------------------------------------------------
-// DatabaseStorage — production implementation backed by PostgreSQL via Drizzle
+// DatabaseStorage — all stats are computed by PostgreSQL queries
 // ---------------------------------------------------------------------------
 export class DatabaseStorage implements IStorage {
 
   // ── createEvent ──────────────────────────────────────────────────────────
-  /** Inserts a single learning event into the database and returns the new row. */
   async createEvent(insertEvent: InsertEvent): Promise<Event> {
     const [event] = await db.insert(events).values(insertEvent).returning();
     return event;
   }
 
   // ── getEvents ────────────────────────────────────────────────────────────
-  /** Returns every event in the database, ordered by timestamp ascending. */
   async getEvents(): Promise<Event[]> {
     return await db.select().from(events).orderBy(events.timestamp);
   }
 
   // ── getStudentsWithStats ─────────────────────────────────────────────────
   /**
-   * Builds a summary row for every unique student:
-   *   - enrolledCount  — number of distinct courses the student enrolled in
-   *   - completedCount — number of those courses they actually finished
-   *
-   * Completion is determined in two ways (whichever comes first):
-   *   1. An explicit course_ended event exists for that student+course pair.
-   *   2. Every lesson in the course has a lesson_finished OR quiz_submitted event.
+   * SQL query overview:
+   *   enrollment_events  — distinct (user_id, course_id) pairs from enrollment events
+   *   explicit_completions — pairs where a course_ended-type event exists
+   *   lesson_counts      — total distinct lessons attempted per (user, course)
+   *   finished_lesson_counts — lessons that have a finish OR quiz-submit event
+   *   inferred_completions — pairs where all lessons are finished (no explicit end event needed)
+   *   all_completions    — union of explicit and inferred
+   *   Final SELECT counts enrolled and completed per user.
    */
   async getStudentsWithStats(): Promise<{ userId: number; enrolledCount: number; completedCount: number }[]> {
-    const allEvents = await db.select().from(events);
+    const result = await db.execute(sql.raw(`
+      WITH enrollment_events AS (
+        SELECT DISTINCT user_id, course_id
+        FROM events
+        WHERE event_type IN ${ENROLLMENT_TYPES}
+      ),
+      explicit_completions AS (
+        SELECT DISTINCT user_id, course_id
+        FROM events
+        WHERE event_type IN ${COURSE_END_TYPES}
+      ),
+      lesson_counts AS (
+        SELECT user_id, course_id, COUNT(DISTINCT lesson_id) AS total_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL
+        GROUP BY user_id, course_id
+      ),
+      finished_lesson_counts AS (
+        SELECT user_id, course_id, COUNT(DISTINCT lesson_id) AS finished_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL
+          AND event_type IN ${LESSON_FINISH_TYPES.slice(0, -1)}, ${QUIZ_SUBMIT_TYPES.slice(1)}
+        GROUP BY user_id, course_id
+      ),
+      inferred_completions AS (
+        SELECT lc.user_id, lc.course_id
+        FROM lesson_counts lc
+        JOIN finished_lesson_counts fl
+          ON lc.user_id = fl.user_id AND lc.course_id = fl.course_id
+        WHERE lc.total_lessons > 0 AND lc.total_lessons = fl.finished_lessons
+      ),
+      all_completions AS (
+        SELECT user_id, course_id FROM explicit_completions
+        UNION
+        SELECT user_id, course_id FROM inferred_completions
+      )
+      SELECT
+        e.user_id,
+        COUNT(DISTINCT e.course_id)::int AS enrolled_count,
+        COUNT(DISTINCT c.course_id)::int AS completed_count
+      FROM enrollment_events e
+      LEFT JOIN all_completions c ON e.user_id = c.user_id AND e.course_id = c.course_id
+      GROUP BY e.user_id
+      ORDER BY e.user_id
+    `));
 
-    // Build a map of userId → { enrolled: Set<courseId>, completed: Set<courseId> }
-    const studentMap = new Map<number, { enrolled: Set<number>; completed: Set<number> }>();
-
-    // First pass: initialise an entry for every user seen in any event
-    allEvents.forEach(e => {
-      if (!studentMap.has(e.userId)) {
-        studentMap.set(e.userId, { enrolled: new Set(), completed: new Set() });
-      }
-    });
-
-    // Second pass: populate enrolled and completed sets from explicit events
-    allEvents.forEach(e => {
-      const student = studentMap.get(e.userId)!;
-      if (isCourseEnrollment(e.eventType)) student.enrolled.add(e.courseId);
-      if (isCourseEnd(e.eventType))        student.completed.add(e.courseId);
-    });
-
-    // Third pass: infer completion from lesson activity when no explicit end event exists
-    for (const userId of studentMap.keys()) {
-      const userEvents = allEvents.filter(e => e.userId === userId);
-      const student    = studentMap.get(userId)!;
-
-      for (const courseId of student.enrolled) {
-        if (student.completed.has(courseId)) continue; // already marked complete
-
-        const courseEvents = userEvents.filter(e => e.courseId === courseId);
-        const lessonIds    = Array.from(new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!)));
-
-        // Mark complete only if there is at least one lesson AND every lesson
-        // has either a finish event or a quiz submission
-        if (lessonIds.length > 0) {
-          const allDone = lessonIds.every(lessonId =>
-            courseEvents.some(e => e.lessonId === lessonId && isLessonFinish(e.eventType)) ||
-            courseEvents.some(e => e.lessonId === lessonId && isQuizSubmit(e.eventType))
-          );
-          if (allDone) student.completed.add(courseId);
-        }
-      }
-    }
-
-    return Array.from(studentMap.entries())
-      .map(([userId, stats]) => ({
-        userId,
-        enrolledCount:  stats.enrolled.size,
-        completedCount: stats.completed.size,
-      }))
-      .sort((a, b) => a.userId - b.userId);
+    return (result.rows as any[]).map(r => ({
+      userId:         Number(r.user_id),
+      enrolledCount:  Number(r.enrolled_count),
+      completedCount: Number(r.completed_count),
+    }));
   }
 
   // ── getStudentStats ──────────────────────────────────────────────────────
   /**
-   * Returns a complete learning timeline for a single student.
-   *
-   * For each course the student enrolled in, the result includes:
-   *   - isCompleted / enrolledAt / durationMinutes
-   *   - activeDays — number of distinct calendar days with any activity
-   *   - gapEnrollmentToFirstLessonMinutes — delay before first lesson started
-   *   - lessons[] — each lesson with timing and quiz breakdown
-   *
-   * Duration fields:
-   *   - lessonDurationMinutes — time from lesson_started to lesson_finished
-   *     (or to the last quiz_submitted if there is no explicit finish event)
-   *   - durationDays — calendar days spanned (0 = same day)
-   *
-   * This data is consumed by the Student Details page and the Insights modal.
+   * Returns a complete learning timeline for a single student using SQL for
+   * all aggregation. Separate queries are issued for:
+   *   1. Enrolled courses (with enrollment + completion timestamps)
+   *   2. Lesson pairs (start/finish times, active days, inferred completion)
+   *   3. Quiz pairs (start/submit times, attempts from metadata)
    */
   async getStudentStats(userId: number) {
-    const studentEvents = await db.select().from(events).where(eq(events.userId, userId));
 
-    // Collect all courses this student enrolled in
-    const enrolledCourseIds = Array.from(
-      new Set(studentEvents.filter(e => isCourseEnrollment(e.eventType)).map(e => e.courseId))
-    );
+    // ── 1. Courses this student enrolled in ─────────────────────────────
+    const coursesResult = await db.execute(sql.raw(`
+      WITH enrollment_events AS (
+        SELECT DISTINCT user_id, course_id
+        FROM events
+        WHERE event_type IN ${ENROLLMENT_TYPES}
+          AND user_id = ${userId}
+      ),
+      explicit_completions AS (
+        SELECT DISTINCT user_id, course_id
+        FROM events
+        WHERE event_type IN ${COURSE_END_TYPES}
+          AND user_id = ${userId}
+      ),
+      lesson_counts AS (
+        SELECT user_id, course_id, COUNT(DISTINCT lesson_id) AS total_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL AND user_id = ${userId}
+        GROUP BY user_id, course_id
+      ),
+      finished_lesson_counts AS (
+        SELECT user_id, course_id, COUNT(DISTINCT lesson_id) AS finished_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL
+          AND event_type IN ${LESSON_FINISH_TYPES.slice(0, -1)}, ${QUIZ_SUBMIT_TYPES.slice(1)}
+          AND user_id = ${userId}
+        GROUP BY user_id, course_id
+      ),
+      inferred_completions AS (
+        SELECT lc.user_id, lc.course_id
+        FROM lesson_counts lc
+        JOIN finished_lesson_counts fl
+          ON lc.user_id = fl.user_id AND lc.course_id = fl.course_id
+        WHERE lc.total_lessons > 0 AND lc.total_lessons = fl.finished_lessons
+      ),
+      all_completions AS (
+        SELECT user_id, course_id FROM explicit_completions
+        UNION
+        SELECT user_id, course_id FROM inferred_completions
+      ),
+      enrollment_time AS (
+        SELECT DISTINCT ON (user_id, course_id) user_id, course_id, timestamp AS enrolled_at
+        FROM events
+        WHERE event_type IN ${ENROLLMENT_TYPES} AND user_id = ${userId}
+        ORDER BY user_id, course_id, timestamp
+      ),
+      completion_time AS (
+        SELECT DISTINCT ON (user_id, course_id) user_id, course_id, timestamp AS completed_at
+        FROM events
+        WHERE event_type IN ${COURSE_END_TYPES} AND user_id = ${userId}
+        ORDER BY user_id, course_id, timestamp
+      ),
+      last_lesson_finish AS (
+        SELECT user_id, course_id, MAX(timestamp) AS last_finish
+        FROM events
+        WHERE lesson_id IS NOT NULL
+          AND event_type IN ${LESSON_FINISH_TYPES.slice(0, -1)}, ${QUIZ_SUBMIT_TYPES.slice(1)}
+          AND user_id = ${userId}
+        GROUP BY user_id, course_id
+      ),
+      active_days AS (
+        SELECT user_id, course_id, COUNT(DISTINCT DATE(timestamp)) AS active_days
+        FROM events
+        WHERE user_id = ${userId}
+        GROUP BY user_id, course_id
+      ),
+      first_lesson_start AS (
+        SELECT user_id, course_id, MIN(timestamp) AS first_lesson_at
+        FROM events
+        WHERE event_type IN ${LESSON_START_TYPES} AND user_id = ${userId}
+        GROUP BY user_id, course_id
+      )
+      SELECT
+        ee.course_id,
+        et.enrolled_at,
+        COALESCE(ct.completed_at, llf.last_finish) AS course_end_at,
+        (EXTRACT(EPOCH FROM (COALESCE(ct.completed_at, llf.last_finish) - et.enrolled_at)) / 60)::int AS duration_minutes,
+        CASE WHEN ac.course_id IS NOT NULL THEN true ELSE false END AS is_completed,
+        ad.active_days::int,
+        (EXTRACT(EPOCH FROM (fls.first_lesson_at - et.enrolled_at)) / 60)::int AS gap_enrollment_to_first_lesson_minutes
+      FROM enrollment_events ee
+      JOIN enrollment_time et ON et.user_id = ee.user_id AND et.course_id = ee.course_id
+      LEFT JOIN all_completions ac ON ac.user_id = ee.user_id AND ac.course_id = ee.course_id
+      LEFT JOIN completion_time ct ON ct.user_id = ee.user_id AND ct.course_id = ee.course_id
+      LEFT JOIN last_lesson_finish llf ON llf.user_id = ee.user_id AND llf.course_id = ee.course_id
+      LEFT JOIN active_days ad ON ad.user_id = ee.user_id AND ad.course_id = ee.course_id
+      LEFT JOIN first_lesson_start fls ON fls.user_id = ee.user_id AND fls.course_id = ee.course_id
+      ORDER BY ee.course_id
+    `));
 
-    const courses = enrolledCourseIds.map(courseId => {
-      // All events for this student in this course, sorted chronologically
-      const courseEvents = studentEvents
-        .filter(e => e.courseId === courseId)
-        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    const courseRows = coursesResult.rows as any[];
 
-      const enrollmentEvent = courseEvents.find(e => isCourseEnrollment(e.eventType));
-      const completionEvent = courseEvents.find(e => isCourseEnd(e.eventType));
+    // ── 2. All lessons for this student across all courses ───────────────
+    const lessonsResult = await db.execute(sql.raw(`
+      WITH lesson_starts AS (
+        SELECT DISTINCT ON (course_id, lesson_id)
+          course_id, lesson_id, timestamp AS started_at
+        FROM events
+        WHERE event_type IN ${LESSON_START_TYPES}
+          AND user_id = ${userId}
+          AND lesson_id IS NOT NULL
+        ORDER BY course_id, lesson_id, timestamp
+      ),
+      lesson_finishes AS (
+        SELECT DISTINCT ON (course_id, lesson_id)
+          course_id, lesson_id, timestamp AS finished_at
+        FROM events
+        WHERE event_type IN ${LESSON_FINISH_TYPES}
+          AND user_id = ${userId}
+          AND lesson_id IS NOT NULL
+        ORDER BY course_id, lesson_id, timestamp
+      ),
+      quiz_last_submit AS (
+        SELECT course_id, lesson_id, MAX(timestamp) AS last_submit_at
+        FROM events
+        WHERE event_type IN ${QUIZ_SUBMIT_TYPES}
+          AND user_id = ${userId}
+          AND lesson_id IS NOT NULL
+        GROUP BY course_id, lesson_id
+      ),
+      quiz_submitted_lessons AS (
+        SELECT DISTINCT course_id, lesson_id
+        FROM events
+        WHERE event_type IN ${QUIZ_SUBMIT_TYPES}
+          AND user_id = ${userId}
+          AND lesson_id IS NOT NULL
+      )
+      SELECT
+        ls.course_id,
+        ls.lesson_id,
+        ls.started_at,
+        COALESCE(lf.finished_at, qls.last_submit_at) AS finished_at,
+        CASE WHEN lf.lesson_id IS NOT NULL OR qsl.lesson_id IS NOT NULL THEN true ELSE false END AS is_finished,
+        CASE
+          WHEN ls.started_at IS NOT NULL AND COALESCE(lf.finished_at, qls.last_submit_at) IS NOT NULL
+          THEN GREATEST(0, (EXTRACT(EPOCH FROM (COALESCE(lf.finished_at, qls.last_submit_at) - ls.started_at)) / 60))::int
+          ELSE NULL
+        END AS lesson_duration_minutes,
+        CASE
+          WHEN ls.started_at IS NOT NULL AND COALESCE(lf.finished_at, qls.last_submit_at) IS NOT NULL
+          THEN GREATEST(0, DATE(COALESCE(lf.finished_at, qls.last_submit_at)) - DATE(ls.started_at))
+          ELSE NULL
+        END AS duration_days
+      FROM lesson_starts ls
+      LEFT JOIN lesson_finishes lf ON lf.course_id = ls.course_id AND lf.lesson_id = ls.lesson_id
+      LEFT JOIN quiz_last_submit qls ON qls.course_id = ls.course_id AND qls.lesson_id = ls.lesson_id
+      LEFT JOIN quiz_submitted_lessons qsl ON qsl.course_id = ls.course_id AND qsl.lesson_id = ls.lesson_id
+      ORDER BY ls.course_id, ls.started_at
+    `));
 
-      // Build per-lesson objects
-      const lessons = Array.from(
-        new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))
-      ).map(lessonId => {
-        const startEvent  = courseEvents.find(e => e.lessonId === lessonId && isLessonStart(e.eventType));
-        const finishEvent = courseEvents.find(e => e.lessonId === lessonId && isLessonFinish(e.eventType));
+    const lessonRows = lessonsResult.rows as any[];
 
-        // Build per-quiz objects for this lesson
-        const lessonQuizzes = Array.from(
-          new Set(courseEvents.filter(e => e.lessonId === lessonId && e.quizId).map(e => e.quizId!))
-        ).map(quizId => {
-          const quizStartEvent = courseEvents.find(e => e.quizId === quizId && isQuizStart(e.eventType));
-          const submitEvent    = courseEvents.find(e => e.quizId === quizId && isQuizSubmit(e.eventType));
+    // ── 3. All quizzes for this student across all courses/lessons ────────
+    const quizzesResult = await db.execute(sql.raw(`
+      WITH quiz_starts AS (
+        SELECT DISTINCT ON (course_id, lesson_id, quiz_id)
+          course_id, lesson_id, quiz_id, timestamp AS started_at
+        FROM events
+        WHERE event_type IN ${QUIZ_START_TYPES}
+          AND user_id = ${userId}
+          AND quiz_id IS NOT NULL
+        ORDER BY course_id, lesson_id, quiz_id, timestamp
+      ),
+      quiz_submits AS (
+        SELECT DISTINCT ON (course_id, lesson_id, quiz_id)
+          course_id, lesson_id, quiz_id, timestamp AS submitted_at,
+          metadata
+        FROM events
+        WHERE event_type IN ${QUIZ_SUBMIT_TYPES}
+          AND user_id = ${userId}
+          AND quiz_id IS NOT NULL
+        ORDER BY course_id, lesson_id, quiz_id, timestamp
+      ),
+      lesson_start_times AS (
+        SELECT DISTINCT ON (course_id, lesson_id)
+          course_id, lesson_id, timestamp AS lesson_started_at
+        FROM events
+        WHERE event_type IN ${LESSON_START_TYPES}
+          AND user_id = ${userId}
+        ORDER BY course_id, lesson_id, timestamp
+      )
+      SELECT
+        qs.course_id,
+        qs.lesson_id,
+        qs.quiz_id,
+        qs.started_at,
+        qsub.submitted_at,
+        CASE WHEN qsub.quiz_id IS NOT NULL THEN true ELSE false END AS is_submitted,
+        CASE
+          WHEN qs.started_at IS NOT NULL AND qsub.submitted_at IS NOT NULL
+          THEN GREATEST(0, (EXTRACT(EPOCH FROM (qsub.submitted_at - qs.started_at)) / 60))::int
+          ELSE NULL
+        END AS duration_minutes,
+        CASE
+          WHEN lst.lesson_started_at IS NOT NULL AND qs.started_at IS NOT NULL
+          THEN (EXTRACT(EPOCH FROM (qs.started_at - lst.lesson_started_at)) / 60)::int
+          ELSE NULL
+        END AS gap_from_lesson_start_minutes,
+        qsub.metadata
+      FROM quiz_starts qs
+      LEFT JOIN quiz_submits qsub ON qsub.course_id = qs.course_id AND qsub.lesson_id IS NOT DISTINCT FROM qs.lesson_id AND qsub.quiz_id = qs.quiz_id
+      LEFT JOIN lesson_start_times lst ON lst.course_id = qs.course_id AND lst.lesson_id IS NOT DISTINCT FROM qs.lesson_id
+      ORDER BY qs.course_id, qs.lesson_id, qs.quiz_id
+    `));
 
-          // How long after the lesson started did the student open the quiz?
-          let gapFromLessonStartMinutes: number | undefined;
-          if (startEvent && quizStartEvent &&
-              !isNaN(startEvent.timestamp.getTime()) &&
-              !isNaN(quizStartEvent.timestamp.getTime())) {
-            gapFromLessonStartMinutes = Math.round(
-              (quizStartEvent.timestamp.getTime() - startEvent.timestamp.getTime()) / (1000 * 60)
-            );
-          }
+    const quizRows = quizzesResult.rows as any[];
 
-          // How long did the student spend on the quiz itself?
-          let durationMinutes: number | undefined;
-          if (quizStartEvent && submitEvent &&
-              !isNaN(quizStartEvent.timestamp.getTime()) &&
-              !isNaN(submitEvent.timestamp.getTime())) {
-            durationMinutes = Math.round(
-              (submitEvent.timestamp.getTime() - quizStartEvent.timestamp.getTime()) / (1000 * 60)
-            );
-          }
+    // ── 4. Orphan quizzes (no lesson_id) ─────────────────────────────────
+    const orphanQuizzesResult = await db.execute(sql.raw(`
+      WITH orphan_quiz_submits AS (
+        SELECT DISTINCT ON (course_id, quiz_id)
+          course_id, quiz_id, timestamp AS submitted_at
+        FROM events
+        WHERE event_type IN ${QUIZ_SUBMIT_TYPES}
+          AND user_id = ${userId}
+          AND lesson_id IS NULL
+          AND quiz_id IS NOT NULL
+        ORDER BY course_id, quiz_id, timestamp
+      ),
+      orphan_quiz_ids AS (
+        SELECT DISTINCT course_id, quiz_id
+        FROM events
+        WHERE quiz_id IS NOT NULL AND lesson_id IS NULL AND user_id = ${userId}
+      )
+      SELECT
+        oq.course_id,
+        oq.quiz_id,
+        CASE WHEN oqs.quiz_id IS NOT NULL THEN true ELSE false END AS is_submitted,
+        oqs.submitted_at
+      FROM orphan_quiz_ids oq
+      LEFT JOIN orphan_quiz_submits oqs ON oqs.course_id = oq.course_id AND oqs.quiz_id = oq.quiz_id
+      ORDER BY oq.course_id, oq.quiz_id
+    `));
 
-          // Extract attempt count from metadata — prefer the quiz_submitted event
-          // since that's where attempts are most reliably recorded, then fall
-          // back to any other quiz event for this quiz.
-          // Accepts the value as a number OR a numeric string (e.g. "3" or 3).
-          const allQuizEvents = courseEvents.filter(e => e.quizId === quizId);
-          const orderedQuizEvents = [
-            ...allQuizEvents.filter(e => isQuizSubmit(e.eventType)),
-            ...allQuizEvents.filter(e => !isQuizSubmit(e.eventType)),
-          ];
-          const rawAttempts = orderedQuizEvents
-            .map(e => (e.metadata as any)?.attempts)
-            .find(a => a !== undefined && a !== null);
-          const attemptsFromMetadata =
-            rawAttempts !== undefined && rawAttempts !== null && !isNaN(Number(rawAttempts))
-              ? Number(rawAttempts)
-              : null;
+    const orphanQuizRows = orphanQuizzesResult.rows as any[];
+
+    // ── 5. Assemble the response object ──────────────────────────────────
+    const courses = courseRows.map(cr => {
+      const courseId = Number(cr.course_id);
+
+      const courseLessons = lessonRows
+        .filter(l => Number(l.course_id) === courseId)
+        .map(l => {
+          const lessonId = Number(l.lesson_id);
+          const lessonQuizzes = quizRows
+            .filter(q => Number(q.course_id) === courseId && q.lesson_id !== null && Number(q.lesson_id) === lessonId)
+            .map(q => {
+              // Parse attempts from metadata — prefer the submitted event's metadata
+              const meta = q.metadata;
+              const rawAttempts = meta?.attempts;
+              const attempts = rawAttempts !== undefined && rawAttempts !== null && !isNaN(Number(rawAttempts))
+                ? Number(rawAttempts)
+                : null;
+              return {
+                quizId:                   Number(q.quiz_id),
+                isSubmitted:              q.is_submitted === true || q.is_submitted === 'true',
+                submittedAt:              q.submitted_at ? new Date(q.submitted_at).toISOString() : undefined,
+                startedAt:                q.started_at ? new Date(q.started_at).toISOString() : undefined,
+                durationMinutes:          q.duration_minutes !== null ? Number(q.duration_minutes) : undefined,
+                gapFromLessonStartMinutes: q.gap_from_lesson_start_minutes !== null ? Number(q.gap_from_lesson_start_minutes) : undefined,
+                attempts,
+              };
+            });
 
           return {
-            quizId,
-            isSubmitted: !!submitEvent,
-            submittedAt: submitEvent?.timestamp.toISOString(),
-            startedAt:   quizStartEvent?.timestamp.toISOString(),
-            durationMinutes,
-            gapFromLessonStartMinutes,
-            attempts: attemptsFromMetadata,
+            lessonId,
+            isFinished:           l.is_finished === true || l.is_finished === 'true',
+            startedAt:            l.started_at ? new Date(l.started_at).toISOString() : undefined,
+            finishedAt:           l.finished_at ? new Date(l.finished_at).toISOString() : undefined,
+            durationDays:         l.duration_days !== null ? Number(l.duration_days) : undefined,
+            lessonDurationMinutes: l.lesson_duration_minutes !== null ? Number(l.lesson_duration_minutes) : undefined,
+            quizzes:              lessonQuizzes,
           };
         });
 
-        // ── Lesson duration calculation ─────────────────────────────────
-        // End time = explicit lesson_finished, OR the latest quiz_submitted
-        // (some platforms record submission but not an explicit lesson end)
-        let durationDays: number | undefined;
-        let lessonDurationMinutes: number | undefined;
-
-        if (startEvent) {
-          const latestQuizSubmit = lessonQuizzes
-            .filter(q => q.submittedAt)
-            .reduce((latest, q) => {
-              const d = new Date(q.submittedAt!);
-              return !latest || d > latest ? d : latest;
-            }, null as Date | null);
-
-          const endTimestamp = finishEvent?.timestamp || latestQuizSubmit;
-
-          if (endTimestamp && !isNaN(endTimestamp.getTime())) {
-            const diffMs = endTimestamp.getTime() - startEvent.timestamp.getTime();
-            lessonDurationMinutes = Math.max(0, Math.round(diffMs / (1000 * 60)));
-
-            // Count calendar-day span (0 = same day, 1 = next day, etc.)
-            const startDate = new Date(startEvent.timestamp.getFullYear(), startEvent.timestamp.getMonth(), startEvent.timestamp.getDate());
-            const endDate   = new Date(endTimestamp.getFullYear(), endTimestamp.getMonth(), endTimestamp.getDate());
-            durationDays = Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
-          }
-        }
-
-        return {
-          lessonId,
-          isFinished: !!finishEvent || lessonQuizzes.some(q => q.isSubmitted),
-          startedAt:  startEvent?.timestamp.toISOString(),
-          finishedAt:
-            finishEvent?.timestamp.toISOString() ||
-            // Fall back to the latest quiz submission as the effective end time
-            lessonQuizzes.sort((a, b) => (b.submittedAt?.localeCompare(a.submittedAt || "") || 0))[0]?.submittedAt,
-          durationDays,
-          lessonDurationMinutes,
-          quizzes: lessonQuizzes,
-        };
-      });
-
-      // ── Course duration calculation ─────────────────────────────────────
-      // Course end time = explicit course_ended event, OR the latest lesson finish
-      const lastLessonFinish = lessons
-        .filter(l => l.finishedAt)
-        .sort((a, b) => new Date(b.finishedAt!).getTime() - new Date(a.finishedAt!).getTime())[0]
-        ?.finishedAt;
-      const courseEndTime = completionEvent?.timestamp || (lastLessonFinish ? new Date(lastLessonFinish) : null);
-
-      let courseDurationMinutes: number | undefined;
-      if (enrollmentEvent && courseEndTime) {
-        courseDurationMinutes = Math.round(
-          (courseEndTime.getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60)
-        );
-      }
-
-      // Sort lessons in chronological start order for display
-      const sortedLessons = [...lessons].sort((a, b) => {
-        if (!a.startedAt || !b.startedAt) return 0;
-        return new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime();
-      });
-
-      // How long did the student wait before starting their first lesson?
-      const firstLessonStart = sortedLessons.length > 0 ? sortedLessons[0].startedAt : null;
-      let gapEnrollmentToFirstLessonMinutes: number | undefined;
-      if (enrollmentEvent && firstLessonStart) {
-        gapEnrollmentToFirstLessonMinutes = Math.round(
-          (new Date(firstLessonStart).getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60)
-        );
-      }
-
-      // Count how many distinct calendar days had any activity
-      const activeDays = new Set(courseEvents.map(e => e.timestamp.toDateString())).size;
-
-      // Quizzes that are not tied to a specific lesson (rare but possible)
-      const orphanQuizzes = Array.from(
-        new Set(courseEvents.filter(e => !e.lessonId && e.quizId).map(e => e.quizId!))
-      ).map(quizId => {
-        const submitEvent = courseEvents.find(e => e.quizId === quizId && isQuizSubmit(e.eventType));
-        return {
-          quizId,
-          isSubmitted: !!submitEvent,
-          submittedAt: submitEvent?.timestamp.toISOString(),
-        };
-      });
+      const orphanQuizzes = orphanQuizRows
+        .filter(q => Number(q.course_id) === courseId)
+        .map(q => ({
+          quizId:      Number(q.quiz_id),
+          isSubmitted: q.is_submitted === true || q.is_submitted === 'true',
+          submittedAt: q.submitted_at ? new Date(q.submitted_at).toISOString() : undefined,
+        }));
 
       return {
         courseId,
-        // A course is considered complete if there is an explicit end event,
-        // OR every lesson has a finish/quiz-submit event
-        isCompleted: !!completionEvent || (lessons.length > 0 && lessons.every(l => l.isFinished)),
-        enrolledAt:  enrollmentEvent?.timestamp.toISOString(),
-        durationMinutes: courseDurationMinutes,
-        gapEnrollmentToFirstLessonMinutes,
-        activeDays,
-        lessons: sortedLessons,
-        quizzes: orphanQuizzes,
+        isCompleted:                       cr.is_completed === true || cr.is_completed === 'true',
+        enrolledAt:                        cr.enrolled_at ? new Date(cr.enrolled_at).toISOString() : undefined,
+        durationMinutes:                   cr.duration_minutes !== null ? Number(cr.duration_minutes) : undefined,
+        gapEnrollmentToFirstLessonMinutes: cr.gap_enrollment_to_first_lesson_minutes !== null
+          ? Number(cr.gap_enrollment_to_first_lesson_minutes)
+          : undefined,
+        activeDays:                        cr.active_days !== null ? Number(cr.active_days) : 0,
+        lessons:                           courseLessons,
+        quizzes:                           orphanQuizzes,
       };
     });
 
     return {
-      enrolledCourses:  enrolledCourseIds.length,
+      enrolledCourses:  courses.length,
       completedCourses: courses.filter(c => c.isCompleted).length,
       courses,
     };
@@ -333,254 +437,426 @@ export class DatabaseStorage implements IStorage {
 
   // ── getCourses ───────────────────────────────────────────────────────────
   /**
-   * Returns a high-level summary for every course that has at least one
-   * enrollment event:
-   *   - totalEnrolled  — distinct students who joined
-   *   - totalCompleted — students who finished (explicit or inferred)
-   *   - completionRate — percentage (0–100)
-   *   - totalLessons   — distinct lesson IDs seen across all students
-   *   - lastActivityAt — timestamp of the most recent event in the course
+   * SQL query overview:
+   *   enrolled_users     — distinct students per course from enrollment events
+   *   explicit_completions — students with explicit course_ended events
+   *   inferred_completions — students whose every lesson has a finish/quiz-submit
+   *   all_completions    — union of the above two
+   *   Final SELECT aggregates counts and computes completion rate per course.
    */
   async getCourses(): Promise<any[]> {
-    const allEvents = await db.select().from(events);
+    const result = await db.execute(sql.raw(`
+      WITH enrolled_users AS (
+        SELECT DISTINCT user_id, course_id
+        FROM events
+        WHERE event_type IN ${ENROLLMENT_TYPES}
+      ),
+      explicit_completions AS (
+        SELECT DISTINCT user_id, course_id
+        FROM events
+        WHERE event_type IN ${COURSE_END_TYPES}
+      ),
+      lesson_counts AS (
+        SELECT user_id, course_id, COUNT(DISTINCT lesson_id) AS total_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL
+        GROUP BY user_id, course_id
+      ),
+      finished_lesson_counts AS (
+        SELECT user_id, course_id, COUNT(DISTINCT lesson_id) AS finished_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL
+          AND event_type IN ${LESSON_FINISH_TYPES.slice(0, -1)}, ${QUIZ_SUBMIT_TYPES.slice(1)}
+        GROUP BY user_id, course_id
+      ),
+      inferred_completions AS (
+        SELECT lc.user_id, lc.course_id
+        FROM lesson_counts lc
+        JOIN finished_lesson_counts fl
+          ON lc.user_id = fl.user_id AND lc.course_id = fl.course_id
+        WHERE lc.total_lessons > 0 AND lc.total_lessons = fl.finished_lessons
+      ),
+      all_completions AS (
+        SELECT user_id, course_id FROM explicit_completions
+        UNION
+        SELECT user_id, course_id FROM inferred_completions
+      ),
+      course_lesson_counts AS (
+        SELECT course_id, COUNT(DISTINCT lesson_id) AS total_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL
+        GROUP BY course_id
+      ),
+      course_last_activity AS (
+        SELECT course_id, MAX(timestamp) AS last_activity_at
+        FROM events
+        GROUP BY course_id
+      )
+      SELECT
+        eu.course_id,
+        COUNT(DISTINCT eu.user_id)::int AS total_enrolled,
+        COUNT(DISTINCT ac.user_id)::int AS total_completed,
+        CASE
+          WHEN COUNT(DISTINCT eu.user_id) > 0
+          THEN ROUND((COUNT(DISTINCT ac.user_id)::numeric / COUNT(DISTINCT eu.user_id)) * 100)::int
+          ELSE 0
+        END AS completion_rate,
+        COALESCE(clc.total_lessons, 0)::int AS total_lessons,
+        cla.last_activity_at
+      FROM enrolled_users eu
+      LEFT JOIN all_completions ac ON ac.user_id = eu.user_id AND ac.course_id = eu.course_id
+      LEFT JOIN course_lesson_counts clc ON clc.course_id = eu.course_id
+      LEFT JOIN course_last_activity cla ON cla.course_id = eu.course_id
+      GROUP BY eu.course_id, clc.total_lessons, cla.last_activity_at
+      ORDER BY eu.course_id
+    `));
 
-    // Identify all courses by finding distinct courseIds from enrollment events
-    const courseIds = Array.from(
-      new Set(allEvents.filter(e => isCourseEnrollment(e.eventType)).map(e => e.courseId))
-    );
-
-    return courseIds.map(courseId => {
-      const courseEvents = allEvents.filter(e => e.courseId === courseId);
-      const enrolledUsers = new Set(courseEvents.filter(e => isCourseEnrollment(e.eventType)).map(e => e.userId));
-      const totalLessons  = new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!)).size;
-      const lastActivityAt = [...courseEvents]
-        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0]
-        ?.timestamp.toISOString();
-
-      // Count completions using the same two-step logic as getStudentsWithStats
-      let completedCount = 0;
-      for (const userId of enrolledUsers) {
-        const userCourseEvents = courseEvents.filter(e => e.userId === userId);
-
-        // Step 1: explicit course_ended event
-        if (userCourseEvents.some(e => isCourseEnd(e.eventType))) {
-          completedCount++;
-          continue;
-        }
-
-        // Step 2: every lesson has a finish or quiz-submit event
-        const lessonIds = Array.from(new Set(userCourseEvents.filter(e => e.lessonId).map(e => e.lessonId!)));
-        if (lessonIds.length > 0 && lessonIds.every(lid =>
-          userCourseEvents.some(e => e.lessonId === lid && isLessonFinish(e.eventType)) ||
-          userCourseEvents.some(e => e.lessonId === lid && isQuizSubmit(e.eventType))
-        )) completedCount++;
-      }
-
-      return {
-        courseId,
-        totalEnrolled:  enrolledUsers.size,
-        totalCompleted: completedCount,
-        completionRate: enrolledUsers.size > 0
-          ? Math.round((completedCount / enrolledUsers.size) * 100)
-          : 0,
-        totalLessons,
-        lastActivityAt,
-      };
-    }).sort((a, b) => a.courseId - b.courseId);
+    return (result.rows as any[]).map(r => ({
+      courseId:       Number(r.course_id),
+      totalEnrolled:  Number(r.total_enrolled),
+      totalCompleted: Number(r.total_completed),
+      completionRate: Number(r.completion_rate),
+      totalLessons:   Number(r.total_lessons),
+      lastActivityAt: r.last_activity_at ? new Date(r.last_activity_at).toISOString() : undefined,
+    }));
   }
 
   // ── getCourseStats ───────────────────────────────────────────────────────
   /**
-   * Returns deep analytics for a single course:
-   *
-   *   Summary:
-   *     - totalEnrolled / totalCompleted / completionRate / avgDurationMinutes
-   *
-   *   lessons[] — one entry per distinct lessonId, aggregated across all students:
-   *     - totalStarted / totalFinished / completionRate / avgDurationMinutes
-   *     - quizzes[] — same aggregates per quizId within the lesson
-   *
-   *   students[] — one entry per enrolled student:
-   *     - isCompleted / durationMinutes / pace
-   *
-   * Pace is classified by total course duration:
-   *   Rushing (<1h) | Light Engagement (1–2h) | Normal (2–3h) | Slow (3–4h) | Struggling (>4h)
+   * SQL queries for a single course:
+   *   1. Enrollment/completion summary (total counts, avg duration)
+   *   2. Per-lesson aggregates (started/finished counts, avg duration)
+   *   3. Per-quiz aggregates within each lesson
+   *   4. Per-student completion status and duration (for pace classification)
    */
   async getCourseStats(courseId: number): Promise<any> {
-    const courseEvents = await db.select().from(events).where(eq(events.courseId, courseId));
 
-    // All students who enrolled in this course
-    const enrolledUserIds = Array.from(
-      new Set(courseEvents.filter(e => isCourseEnrollment(e.eventType)).map(e => e.userId))
-    );
+    // ── 1. Course-level totals ─────────────────────────────────────────
+    const summaryResult = await db.execute(sql.raw(`
+      WITH enrolled_users AS (
+        SELECT DISTINCT user_id
+        FROM events
+        WHERE event_type IN ${ENROLLMENT_TYPES} AND course_id = ${courseId}
+      ),
+      explicit_completions AS (
+        SELECT DISTINCT user_id
+        FROM events
+        WHERE event_type IN ${COURSE_END_TYPES} AND course_id = ${courseId}
+      ),
+      lesson_counts AS (
+        SELECT user_id, COUNT(DISTINCT lesson_id) AS total_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL AND course_id = ${courseId}
+        GROUP BY user_id
+      ),
+      finished_lesson_counts AS (
+        SELECT user_id, COUNT(DISTINCT lesson_id) AS finished_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL AND course_id = ${courseId}
+          AND event_type IN ${LESSON_FINISH_TYPES.slice(0, -1)}, ${QUIZ_SUBMIT_TYPES.slice(1)}
+        GROUP BY user_id
+      ),
+      inferred_completions AS (
+        SELECT lc.user_id
+        FROM lesson_counts lc
+        JOIN finished_lesson_counts fl ON lc.user_id = fl.user_id
+        WHERE lc.total_lessons > 0 AND lc.total_lessons = fl.finished_lessons
+      ),
+      all_completions AS (
+        SELECT user_id FROM explicit_completions
+        UNION
+        SELECT user_id FROM inferred_completions
+      ),
+      enrollment_times AS (
+        SELECT DISTINCT ON (user_id)
+          user_id, timestamp AS enrolled_at
+        FROM events
+        WHERE event_type IN ${ENROLLMENT_TYPES} AND course_id = ${courseId}
+        ORDER BY user_id, timestamp
+      ),
+      completion_times AS (
+        SELECT DISTINCT ON (user_id)
+          user_id, timestamp AS completed_at
+        FROM events
+        WHERE event_type IN ${COURSE_END_TYPES} AND course_id = ${courseId}
+        ORDER BY user_id, timestamp
+      ),
+      last_lesson_per_user AS (
+        SELECT user_id, MAX(timestamp) AS last_finish
+        FROM events
+        WHERE course_id = ${courseId}
+          AND event_type IN ${LESSON_FINISH_TYPES.slice(0, -1)}, ${QUIZ_SUBMIT_TYPES.slice(1)}
+        GROUP BY user_id
+      ),
+      durations AS (
+        SELECT
+          et.user_id,
+          EXTRACT(EPOCH FROM (COALESCE(ct.completed_at, llp.last_finish) - et.enrolled_at)) / 60 AS duration_minutes
+        FROM enrollment_times et
+        LEFT JOIN completion_times ct ON ct.user_id = et.user_id
+        LEFT JOIN last_lesson_per_user llp ON llp.user_id = et.user_id
+        WHERE et.user_id IN (SELECT user_id FROM all_completions)
+          AND COALESCE(ct.completed_at, llp.last_finish) IS NOT NULL
+      ),
+      last_activity AS (
+        SELECT MAX(timestamp) AS last_activity_at
+        FROM events
+        WHERE course_id = ${courseId}
+      )
+      SELECT
+        (SELECT COUNT(DISTINCT user_id) FROM enrolled_users)::int AS total_enrolled,
+        (SELECT COUNT(DISTINCT user_id) FROM all_completions)::int AS total_completed,
+        CASE
+          WHEN (SELECT COUNT(*) FROM enrolled_users) > 0
+          THEN ROUND(
+            (SELECT COUNT(DISTINCT user_id) FROM all_completions)::numeric /
+            (SELECT COUNT(DISTINCT user_id) FROM enrolled_users) * 100
+          )::int
+          ELSE 0
+        END AS completion_rate,
+        (SELECT ROUND(AVG(duration_minutes))::int FROM durations) AS avg_duration_minutes,
+        (SELECT last_activity_at FROM last_activity) AS last_activity_at
+    `));
 
-    // ── Step 1: determine which students completed the course ─────────────
-    const completedUserIds = new Set<number>();
-    for (const userId of enrolledUserIds) {
-      const userCourseEvents = courseEvents.filter(e => e.userId === userId);
+    const summary = (summaryResult.rows as any[])[0] || {};
 
-      if (userCourseEvents.some(e => isCourseEnd(e.eventType))) {
-        completedUserIds.add(userId);
-        continue;
-      }
+    // ── 2. Per-lesson aggregates ───────────────────────────────────────
+    const lessonsResult = await db.execute(sql.raw(`
+      WITH lesson_ids AS (
+        SELECT DISTINCT lesson_id
+        FROM events
+        WHERE course_id = ${courseId} AND lesson_id IS NOT NULL
+      ),
+      lesson_start_users AS (
+        SELECT lesson_id, user_id, MIN(timestamp) AS started_at
+        FROM events
+        WHERE course_id = ${courseId}
+          AND lesson_id IS NOT NULL
+          AND event_type IN ${LESSON_START_TYPES}
+        GROUP BY lesson_id, user_id
+      ),
+      lesson_finish_users AS (
+        SELECT DISTINCT lesson_id, user_id
+        FROM events
+        WHERE course_id = ${courseId}
+          AND lesson_id IS NOT NULL
+          AND event_type IN ${LESSON_FINISH_TYPES.slice(0, -1)}, ${QUIZ_SUBMIT_TYPES.slice(1)}
+      ),
+      lesson_finish_times AS (
+        SELECT lesson_id, user_id, MAX(timestamp) AS finished_at
+        FROM events
+        WHERE course_id = ${courseId}
+          AND lesson_id IS NOT NULL
+          AND event_type IN ${LESSON_FINISH_TYPES.slice(0, -1)}, ${QUIZ_SUBMIT_TYPES.slice(1)}
+        GROUP BY lesson_id, user_id
+      ),
+      lesson_durations AS (
+        SELECT
+          lsu.lesson_id,
+          EXTRACT(EPOCH FROM (lft.finished_at - lsu.started_at)) / 60 AS duration_minutes
+        FROM lesson_start_users lsu
+        JOIN lesson_finish_times lft ON lft.lesson_id = lsu.lesson_id AND lft.user_id = lsu.user_id
+        WHERE lft.finished_at >= lsu.started_at
+      )
+      SELECT
+        li.lesson_id,
+        (SELECT COUNT(DISTINCT user_id) FROM lesson_start_users lsu WHERE lsu.lesson_id = li.lesson_id)::int AS total_started,
+        (SELECT COUNT(DISTINCT user_id) FROM lesson_finish_users lfu WHERE lfu.lesson_id = li.lesson_id)::int AS total_finished,
+        CASE
+          WHEN (SELECT COUNT(DISTINCT user_id) FROM lesson_start_users lsu WHERE lsu.lesson_id = li.lesson_id) > 0
+          THEN ROUND(
+            (SELECT COUNT(DISTINCT user_id) FROM lesson_finish_users lfu WHERE lfu.lesson_id = li.lesson_id)::numeric /
+            (SELECT COUNT(DISTINCT user_id) FROM lesson_start_users lsu WHERE lsu.lesson_id = li.lesson_id) * 100
+          )::int
+          ELSE 0
+        END AS completion_rate,
+        (SELECT ROUND(AVG(duration_minutes))::int FROM lesson_durations ld WHERE ld.lesson_id = li.lesson_id) AS avg_duration_minutes
+      FROM lesson_ids li
+      ORDER BY li.lesson_id
+    `));
 
-      const lessonIds = Array.from(new Set(userCourseEvents.filter(e => e.lessonId).map(e => e.lessonId!)));
-      if (lessonIds.length > 0 && lessonIds.every(lid =>
-        userCourseEvents.some(e => e.lessonId === lid && isLessonFinish(e.eventType)) ||
-        userCourseEvents.some(e => e.lessonId === lid && isQuizSubmit(e.eventType))
-      )) completedUserIds.add(userId);
-    }
+    const lessonRows = lessonsResult.rows as any[];
 
-    // ── Step 2: aggregate per-lesson stats across all students ────────────
-    const allLessonIds = Array.from(
-      new Set(courseEvents.filter(e => e.lessonId).map(e => e.lessonId!))
-    ).sort((a, b) => a - b);
+    // ── 3. Per-quiz aggregates per lesson ──────────────────────────────
+    const quizzesResult = await db.execute(sql.raw(`
+      WITH quiz_ids AS (
+        SELECT DISTINCT lesson_id, quiz_id
+        FROM events
+        WHERE course_id = ${courseId}
+          AND lesson_id IS NOT NULL AND quiz_id IS NOT NULL
+      ),
+      quiz_start_users AS (
+        SELECT lesson_id, quiz_id, user_id, MIN(timestamp) AS started_at
+        FROM events
+        WHERE course_id = ${courseId}
+          AND lesson_id IS NOT NULL AND quiz_id IS NOT NULL
+          AND event_type IN ${QUIZ_START_TYPES}
+        GROUP BY lesson_id, quiz_id, user_id
+      ),
+      quiz_submit_users AS (
+        SELECT DISTINCT lesson_id, quiz_id, user_id
+        FROM events
+        WHERE course_id = ${courseId}
+          AND lesson_id IS NOT NULL AND quiz_id IS NOT NULL
+          AND event_type IN ${QUIZ_SUBMIT_TYPES}
+      ),
+      quiz_submit_times AS (
+        SELECT lesson_id, quiz_id, user_id, MIN(timestamp) AS submitted_at
+        FROM events
+        WHERE course_id = ${courseId}
+          AND lesson_id IS NOT NULL AND quiz_id IS NOT NULL
+          AND event_type IN ${QUIZ_SUBMIT_TYPES}
+        GROUP BY lesson_id, quiz_id, user_id
+      ),
+      quiz_durations AS (
+        SELECT
+          qsu.lesson_id, qsu.quiz_id,
+          EXTRACT(EPOCH FROM (qst.submitted_at - qsu.started_at)) / 60 AS duration_minutes
+        FROM quiz_start_users qsu
+        JOIN quiz_submit_times qst ON qst.lesson_id = qsu.lesson_id AND qst.quiz_id = qsu.quiz_id AND qst.user_id = qsu.user_id
+        WHERE qst.submitted_at >= qsu.started_at
+      )
+      SELECT
+        qi.lesson_id,
+        qi.quiz_id,
+        (SELECT COUNT(DISTINCT user_id) FROM quiz_start_users qsu WHERE qsu.lesson_id = qi.lesson_id AND qsu.quiz_id = qi.quiz_id)::int AS total_started,
+        (SELECT COUNT(DISTINCT user_id) FROM quiz_submit_users qsuu WHERE qsuu.lesson_id = qi.lesson_id AND qsuu.quiz_id = qi.quiz_id)::int AS total_submitted,
+        CASE
+          WHEN (SELECT COUNT(DISTINCT user_id) FROM quiz_start_users qsu WHERE qsu.lesson_id = qi.lesson_id AND qsu.quiz_id = qi.quiz_id) > 0
+          THEN ROUND(
+            (SELECT COUNT(DISTINCT user_id) FROM quiz_submit_users qsuu WHERE qsuu.lesson_id = qi.lesson_id AND qsuu.quiz_id = qi.quiz_id)::numeric /
+            (SELECT COUNT(DISTINCT user_id) FROM quiz_start_users qsu WHERE qsu.lesson_id = qi.lesson_id AND qsu.quiz_id = qi.quiz_id) * 100
+          )::int
+          ELSE 0
+        END AS submission_rate,
+        (SELECT ROUND(AVG(duration_minutes))::int FROM quiz_durations qd WHERE qd.lesson_id = qi.lesson_id AND qd.quiz_id = qi.quiz_id) AS avg_duration_minutes
+      FROM quiz_ids qi
+      ORDER BY qi.lesson_id, qi.quiz_id
+    `));
 
-    const lessons = allLessonIds.map(lessonId => {
-      const lessonEvents = courseEvents.filter(e => e.lessonId === lessonId);
+    const quizRows = quizzesResult.rows as any[];
 
-      // Count unique students who started vs finished this lesson
-      const startedUsers  = new Set(lessonEvents.filter(e => isLessonStart(e.eventType)).map(e => e.userId));
-      const finishedUsers = new Set([
-        ...lessonEvents.filter(e => isLessonFinish(e.eventType)).map(e => e.userId),
-        // A quiz submission also counts as finishing the lesson
-        ...lessonEvents.filter(e => isQuizSubmit(e.eventType)).map(e => e.userId),
-      ]);
+    // ── 4. Per-student stats for this course ──────────────────────────
+    const studentsResult = await db.execute(sql.raw(`
+      WITH enrolled_users AS (
+        SELECT DISTINCT user_id
+        FROM events
+        WHERE event_type IN ${ENROLLMENT_TYPES} AND course_id = ${courseId}
+      ),
+      explicit_completions AS (
+        SELECT DISTINCT user_id
+        FROM events
+        WHERE event_type IN ${COURSE_END_TYPES} AND course_id = ${courseId}
+      ),
+      lesson_counts AS (
+        SELECT user_id, COUNT(DISTINCT lesson_id) AS total_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL AND course_id = ${courseId}
+        GROUP BY user_id
+      ),
+      finished_lesson_counts AS (
+        SELECT user_id, COUNT(DISTINCT lesson_id) AS finished_lessons
+        FROM events
+        WHERE lesson_id IS NOT NULL AND course_id = ${courseId}
+          AND event_type IN ${LESSON_FINISH_TYPES.slice(0, -1)}, ${QUIZ_SUBMIT_TYPES.slice(1)}
+        GROUP BY user_id
+      ),
+      inferred_completions AS (
+        SELECT lc.user_id
+        FROM lesson_counts lc
+        JOIN finished_lesson_counts fl ON lc.user_id = fl.user_id
+        WHERE lc.total_lessons > 0 AND lc.total_lessons = fl.finished_lessons
+      ),
+      all_completions AS (
+        SELECT user_id FROM explicit_completions
+        UNION
+        SELECT user_id FROM inferred_completions
+      ),
+      enrollment_times AS (
+        SELECT DISTINCT ON (user_id)
+          user_id, timestamp AS enrolled_at
+        FROM events
+        WHERE event_type IN ${ENROLLMENT_TYPES} AND course_id = ${courseId}
+        ORDER BY user_id, timestamp
+      ),
+      completion_times AS (
+        SELECT DISTINCT ON (user_id)
+          user_id, timestamp AS completed_at
+        FROM events
+        WHERE event_type IN ${COURSE_END_TYPES} AND course_id = ${courseId}
+        ORDER BY user_id, timestamp
+      ),
+      last_events AS (
+        SELECT user_id, MAX(timestamp) AS last_event_at
+        FROM events
+        WHERE course_id = ${courseId}
+        GROUP BY user_id
+      )
+      SELECT
+        eu.user_id,
+        CASE WHEN ac.user_id IS NOT NULL THEN true ELSE false END AS is_completed,
+        et.enrolled_at,
+        COALESCE(ct.completed_at, le.last_event_at) AS effective_end_at,
+        CASE
+          WHEN et.enrolled_at IS NOT NULL AND COALESCE(ct.completed_at, le.last_event_at) IS NOT NULL
+          THEN (EXTRACT(EPOCH FROM (COALESCE(ct.completed_at, le.last_event_at) - et.enrolled_at)) / 60)::int
+          ELSE NULL
+        END AS duration_minutes
+      FROM enrolled_users eu
+      LEFT JOIN all_completions ac ON ac.user_id = eu.user_id
+      LEFT JOIN enrollment_times et ON et.user_id = eu.user_id
+      LEFT JOIN completion_times ct ON ct.user_id = eu.user_id
+      LEFT JOIN last_events le ON le.user_id = eu.user_id
+      ORDER BY eu.user_id
+    `));
 
-      // Average lesson duration: computed only for students who both started AND finished
-      const durations: number[] = [];
-      for (const userId of startedUsers) {
-        const ul     = lessonEvents.filter(e => e.userId === userId);
-        const start  = ul.find(e => isLessonStart(e.eventType));
-        const finish = ul.find(e => isLessonFinish(e.eventType)) ||
-          [...ul.filter(e => isQuizSubmit(e.eventType))].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+    const studentRows = studentsResult.rows as any[];
 
-        if (start && finish) {
-          const mins = Math.round((finish.timestamp.getTime() - start.timestamp.getTime()) / (1000 * 60));
-          if (mins >= 0) durations.push(mins);
-        }
-      }
-      const avgDurationMinutes = durations.length > 0
-        ? Math.round(durations.reduce((sum, d) => sum + d, 0) / durations.length)
-        : undefined;
-
-      // Per-quiz aggregates for this lesson
-      const quizIds = Array.from(
-        new Set(lessonEvents.filter(e => e.quizId).map(e => e.quizId!))
-      ).sort((a, b) => a - b);
-
-      const quizzes = quizIds.map(quizId => {
-        const qe             = lessonEvents.filter(e => e.quizId === quizId);
-        const startedCount   = new Set(qe.filter(e => isQuizStart(e.eventType)).map(e => e.userId)).size;
-        const submittedCount = new Set(qe.filter(e => isQuizSubmit(e.eventType)).map(e => e.userId)).size;
-
-        // Average time from quiz_started to quiz_submitted
-        const qDurations: number[] = [];
-        for (const userId of new Set(qe.map(e => e.userId))) {
-          const uq  = qe.filter(e => e.userId === userId);
-          const s   = uq.find(e => isQuizStart(e.eventType));
-          const sub = uq.find(e => isQuizSubmit(e.eventType));
-          if (s && sub) {
-            const mins = Math.round((sub.timestamp.getTime() - s.timestamp.getTime()) / (1000 * 60));
-            if (mins >= 0) qDurations.push(mins);
-          }
-        }
-
-        return {
-          quizId,
-          totalStarted:    startedCount,
-          totalSubmitted:  submittedCount,
-          submissionRate:  startedCount > 0 ? Math.round((submittedCount / startedCount) * 100) : 0,
-          avgDurationMinutes: qDurations.length > 0
-            ? Math.round(qDurations.reduce((sum, d) => sum + d, 0) / qDurations.length)
-            : undefined,
-        };
-      });
+    // ── 5. Assemble final response ─────────────────────────────────────
+    const lessons = lessonRows.map(l => {
+      const lessonId = Number(l.lesson_id);
+      const quizzes = quizRows
+        .filter(q => Number(q.lesson_id) === lessonId)
+        .map(q => ({
+          quizId:             Number(q.quiz_id),
+          totalStarted:       Number(q.total_started),
+          totalSubmitted:     Number(q.total_submitted),
+          submissionRate:     Number(q.submission_rate),
+          avgDurationMinutes: q.avg_duration_minutes !== null ? Number(q.avg_duration_minutes) : undefined,
+        }));
 
       return {
         lessonId,
-        totalStarted:    startedUsers.size,
-        totalFinished:   finishedUsers.size,
-        completionRate:  startedUsers.size > 0
-          ? Math.round((finishedUsers.size / startedUsers.size) * 100)
-          : 0,
-        avgDurationMinutes,
+        totalStarted:      Number(l.total_started),
+        totalFinished:     Number(l.total_finished),
+        completionRate:    Number(l.completion_rate),
+        avgDurationMinutes: l.avg_duration_minutes !== null ? Number(l.avg_duration_minutes) : undefined,
         quizzes,
       };
     });
 
-    // ── Step 3: per-student summary with pace classification ──────────────
-    //
-    // Pace is determined solely by total course duration (enrollment → completion).
-    // Courses are expected to be completed within a single day.
-    //
-    // Thresholds:
-    //   Rushing          — completed in < 1 hour
-    //   Light Engagement — completed in 1–2 hours
-    //   Normal           — completed in 2–3 hours  ← healthy target range
-    //   Slow             — completed in 3–4 hours
-    //   Struggling       — completed in > 4 hours
-    //   In Progress      — course not yet completed (no classification possible)
-    const students = enrolledUserIds.map(userId => {
-      // All events for this student in this course, sorted oldest → newest
-      const uce = courseEvents
-        .filter(e => e.userId === userId)
-        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-      const enrollmentEvent = uce.find(e => isCourseEnrollment(e.eventType));
-      const completionEvent = uce.find(e => isCourseEnd(e.eventType));
-      const isCompleted     = completedUserIds.has(userId);
-
-      // Total time from enrollment to the last event (or explicit completion)
-      let durationMinutes: number | undefined;
-      if (enrollmentEvent) {
-        const endEvent = completionEvent || uce[uce.length - 1];
-        if (endEvent) {
-          durationMinutes = Math.round(
-            (endEvent.timestamp.getTime() - enrollmentEvent.timestamp.getTime()) / (1000 * 60)
-          );
-        }
-      }
-
-      // ── Pace classification ─────────────────────────────────────────────
-      // Delegates to classifyPace() — edit shared/paceConfig.ts to change
-      // thresholds, add tiers, or rename labels. No other file needs updating.
-      const pace = classifyPace(durationMinutes, isCompleted).label;
-
+    const students = studentRows.map(s => {
+      const isCompleted     = s.is_completed === true || s.is_completed === 'true';
+      const durationMinutes = s.duration_minutes !== null ? Number(s.duration_minutes) : undefined;
+      const pace            = classifyPace(durationMinutes, isCompleted).label;
       return {
-        userId,
-        enrolledAt:      enrollmentEvent?.timestamp.toISOString(),
+        userId:          Number(s.user_id),
+        enrolledAt:      s.enrolled_at ? new Date(s.enrolled_at).toISOString() : undefined,
         isCompleted,
         durationMinutes,
         pace,
       };
-    }).sort((a, b) => a.userId - b.userId);
-
-    // ── Step 4: aggregate final course-level numbers ──────────────────────
-    // Average duration is computed only over students who fully completed the course
-    const completedDurations = students
-      .filter(s => s.isCompleted && s.durationMinutes !== undefined)
-      .map(s => s.durationMinutes!);
-
-    const avgDurationMinutes = completedDurations.length > 0
-      ? Math.round(completedDurations.reduce((sum, d) => sum + d, 0) / completedDurations.length)
-      : undefined;
-
-    const lastActivityAt = [...courseEvents]
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0]
-      ?.timestamp.toISOString();
+    });
 
     return {
       courseId,
-      totalEnrolled:  enrolledUserIds.length,
-      totalCompleted: completedUserIds.size,
-      completionRate: enrolledUserIds.length > 0
-        ? Math.round((completedUserIds.size / enrolledUserIds.length) * 100)
-        : 0,
-      avgDurationMinutes,
+      totalEnrolled:      Number(summary.total_enrolled ?? 0),
+      totalCompleted:     Number(summary.total_completed ?? 0),
+      completionRate:     Number(summary.completion_rate ?? 0),
+      avgDurationMinutes: summary.avg_duration_minutes !== null ? Number(summary.avg_duration_minutes) : undefined,
+      lastActivityAt:     summary.last_activity_at ? new Date(summary.last_activity_at).toISOString() : undefined,
       lessons,
       students,
-      lastActivityAt,
     };
   }
 
