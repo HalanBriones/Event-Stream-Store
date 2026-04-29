@@ -407,7 +407,6 @@ export default function StudentDetailsPage() {
                 <AccordionTrigger className="hover:no-underline py-6">
                   <div className="flex items-center justify-between w-full pr-4">
                     <div className="flex items-center gap-4">
-                      {/* Icon changes based on completion */}
                       <div className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-colors ${
                         course.isCompleted ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
                       }`}>
@@ -421,11 +420,10 @@ export default function StudentDetailsPage() {
                         <div className="flex flex-col gap-0.5">
                           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
                             {course.isCompleted
-                              ? `Verified Completion • ${course.durationMinutes}m`
+                              ? `Verified Completion • ${formatDuration(course.durationMinutes)}`
                               : 'Status: Active Participation'
                             }
                           </div>
-                          {/* Enrollment date */}
                           {course.enrolledAt && (
                             <div className="text-[10px] font-medium text-muted-foreground/70">
                               Enrolled on {format(new Date(course.enrolledAt), "MMM d, yyyy HH:mm")}
@@ -439,114 +437,173 @@ export default function StudentDetailsPage() {
 
                 {/* Expanded lesson list for this course */}
                 <AccordionContent className="pb-6">
-                  {/* Column labels */}
-                  {course.lessons?.length > 0 && (
-                    <div className="grid grid-cols-[1fr_auto] gap-4 px-2 py-2 border-b border-border mb-0">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lesson</span>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-right pr-2">Timeline</span>
-                    </div>
-                  )}
+                  <div className="space-y-0">
+                    {course.lessons?.map((lesson: any, index: number) => {
+                      const prevLesson = index > 0 ? course.lessons[index - 1] : null;
 
-                  <div className="divide-y divide-border">
-                    {course.lessons?.map((lesson: any) => (
-                      <div key={lesson.lessonId} className="hover:bg-muted/30 transition-colors">
-                        {/* Lesson header row */}
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-                              lesson.isFinished
-                                ? 'bg-green-500/10 text-green-600'
-                                : lesson.startedAt
-                                ? 'bg-orange-500/10 text-orange-600'
-                                : 'bg-muted text-muted-foreground'
-                            }`}>
-                              {lesson.isFinished
-                                ? <CheckCircle2 className="h-4 w-4" />
-                                : <Circle className="h-4 w-4" />
-                              }
-                            </div>
-                            <div>
-                              <div className="font-semibold text-sm">Lesson {lesson.lessonId}</div>
-                              <div className={`text-[10px] font-medium ${
-                                lesson.isFinished
-                                  ? 'text-green-600'
-                                  : lesson.startedAt
-                                  ? 'text-orange-600 font-bold uppercase'
-                                  : 'text-muted-foreground'
-                              }`}>
-                                {lesson.isFinished ? 'Completed' : lesson.startedAt ? 'In Progress' : 'Not started'}
-                              </div>
-                            </div>
-                          </div>
+                      // Gap between end of previous lesson and start of this one
+                      let pauseText: string | null = null;
+                      if (prevLesson && prevLesson.finishedAt && lesson.startedAt) {
+                        const gapMs   = new Date(lesson.startedAt).getTime() - new Date(prevLesson.finishedAt).getTime();
+                        const gapMins = Math.round(gapMs / (1000 * 60));
+                        if (gapMins >= 1440) {
+                          const days = Math.floor(gapMins / 1440);
+                          pauseText = `${days}d ${Math.floor((gapMins % 1440) / 60)}h pause`;
+                        } else if (gapMins >= 60) {
+                          pauseText = `${Math.floor(gapMins / 60)}h ${gapMins % 60}m pause`;
+                        } else if (gapMins >= 1) {
+                          pauseText = `${gapMins}m pause`;
+                        }
+                      }
 
-                          {/* Timeline info */}
-                          <div className="text-right">
-                            {lesson.startedAt ? (
-                              <div className="text-xs font-semibold">
-                                Started: {format(new Date(lesson.startedAt), "MMM d, HH:mm")}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-muted-foreground italic">Not started yet</div>
-                            )}
-                            {lesson.isFinished ? (
-                              <div className="text-xs font-bold text-primary mt-0.5">
-                                Duration: {(() => {
-                                  const mins = lesson.lessonDurationMinutes;
-                                  const days = lesson.durationDays;
-                                  const finalMins = (mins !== undefined && mins !== null && !isNaN(mins)) ? mins : 0;
-                                  if (days > 0) {
-                                    const h = Math.floor((finalMins % 1440) / 60);
-                                    const m = finalMins % 60;
-                                    return `${days}d ${h}h ${m}m`;
-                                  }
-                                  if (finalMins >= 60) return `${Math.floor(finalMins / 60)}h ${finalMins % 60}m`;
-                                  return `${finalMins}m`;
-                                })()}
-                              </div>
-                            ) : lesson.startedAt ? (
-                              <div className="text-[10px] text-orange-600 font-bold mt-0.5 uppercase">In Progress</div>
-                            ) : null}
-                          </div>
-                        </div>
+                      // Total quiz time for this lesson
+                      const totalQuizMinutes = lesson.quizzes?.reduce((sum: number, q: any) => {
+                        return sum + (q.durationMinutes ?? 0);
+                      }, 0) ?? 0;
+                      const totalAttempts = lesson.quizzes?.reduce((sum: number, q: any) => {
+                        return sum + (q.attempts ?? 1);
+                      }, 0) ?? 0;
+                      const hasQuizzes = (lesson.quizzes?.length ?? 0) > 0;
 
-                        {/* Quiz results — subsection with its own header */}
-                        {lesson.quizzes?.length > 0 && (
-                          <div className="mx-2 mb-4 border border-border rounded-lg overflow-hidden">
-                            <div className="bg-muted/50 border-b border-border px-4 py-2 flex items-center gap-2">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                                Assessment Results
+                      return (
+                        <div key={lesson.lessonId}>
+                          {/* Pause gap between lessons */}
+                          {pauseText && (
+                            <div className="flex items-center gap-4 my-4">
+                              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-muted to-transparent" />
+                              <span className="bg-muted px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest text-muted-foreground border border-muted-foreground/10 shadow-sm flex items-center gap-1">
+                                <Clock className="h-2.5 w-2.5" />
+                                {pauseText}
                               </span>
+                              <div className="flex-1 h-px bg-gradient-to-r from-muted via-transparent to-transparent" />
                             </div>
-                            <div className="divide-y divide-border">
-                              {lesson.quizzes?.map((quiz: any) => (
-                                <div
-                                  key={quiz.quizId}
-                                  className="flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-semibold">Quiz #{quiz.quizId}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[10px] text-muted-foreground">
-                                      {quiz.submittedAt
-                                        ? `Submitted ${format(new Date(quiz.submittedAt), "MMM d, HH:mm")}`
-                                        : 'Pending evaluation'
-                                      }
-                                    </span>
-                                    {quiz.isSubmitted ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                                    ) : (
-                                      <Circle className="h-3.5 w-3.5 text-muted-foreground" />
-                                    )}
+                          )}
+
+                          {/* Lesson card */}
+                          <div className="border border-border rounded-xl overflow-hidden mb-1 hover:bg-muted/20 transition-colors">
+                            {/* Lesson header */}
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                  lesson.isFinished
+                                    ? 'bg-green-500/10 text-green-600'
+                                    : lesson.startedAt
+                                    ? 'bg-orange-500/10 text-orange-600'
+                                    : 'bg-muted text-muted-foreground'
+                                }`}>
+                                  {lesson.isFinished
+                                    ? <CheckCircle2 className="h-4 w-4" />
+                                    : <Circle className="h-4 w-4" />
+                                  }
+                                </div>
+                                <div>
+                                  <div className="font-semibold text-sm">Lesson {lesson.lessonId}</div>
+                                  <div className={`text-[10px] font-medium ${
+                                    lesson.isFinished
+                                      ? 'text-green-600'
+                                      : lesson.startedAt
+                                      ? 'text-orange-600 font-bold uppercase'
+                                      : 'text-muted-foreground'
+                                  }`}>
+                                    {lesson.isFinished ? 'Completed' : lesson.startedAt ? 'In Progress' : 'Not started'}
                                   </div>
                                 </div>
-                              ))}
+                              </div>
+
+                              {/* Right side: timing + stat pills */}
+                              <div className="flex flex-wrap items-center gap-2 justify-end">
+                                {lesson.startedAt && (
+                                  <span className="text-[10px] text-muted-foreground font-medium">
+                                    {format(new Date(lesson.startedAt), "MMM d, HH:mm")}
+                                    {lesson.finishedAt && ` → ${format(new Date(lesson.finishedAt), "HH:mm")}`}
+                                  </span>
+                                )}
+
+                                {/* Total time pill */}
+                                {lesson.lessonDurationMinutes !== undefined && lesson.lessonDurationMinutes !== null && (
+                                  <span className="inline-flex items-center gap-1 bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full" data-testid={`pill-total-time-${lesson.lessonId}`}>
+                                    <Clock className="h-2.5 w-2.5" />
+                                    {formatDuration(lesson.lessonDurationMinutes)} total
+                                  </span>
+                                )}
+
+                                {/* Quiz time pill */}
+                                {hasQuizzes && totalQuizMinutes > 0 && (
+                                  <span className="inline-flex items-center gap-1 bg-purple-500/10 text-purple-600 text-[10px] font-bold px-2 py-0.5 rounded-full" data-testid={`pill-quiz-time-${lesson.lessonId}`}>
+                                    <CheckCircle2 className="h-2.5 w-2.5" />
+                                    {formatDuration(totalQuizMinutes)} quiz
+                                  </span>
+                                )}
+
+                                {/* Attempts pill */}
+                                {hasQuizzes && (
+                                  <span className="inline-flex items-center gap-1 bg-orange-500/10 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full" data-testid={`pill-attempts-${lesson.lessonId}`}>
+                                    {totalAttempts} attempt{totalAttempts !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
                             </div>
+
+                            {/* Quiz rows */}
+                            {lesson.quizzes?.length > 0 && (
+                              <div className="border-t border-border bg-muted/20">
+                                <div className="px-4 py-1.5 flex items-center gap-1.5 border-b border-border/50">
+                                  <CheckCircle2 className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                                    Assessments
+                                  </span>
+                                </div>
+                                <div className="divide-y divide-border/50">
+                                  {lesson.quizzes.map((quiz: any) => (
+                                    <div
+                                      key={quiz.quizId}
+                                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5"
+                                      data-testid={`row-quiz-${quiz.quizId}`}
+                                    >
+                                      {/* Left: quiz id + status */}
+                                      <div className="flex items-center gap-2">
+                                        {quiz.isSubmitted
+                                          ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                                          : <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                        }
+                                        <span className="text-xs font-semibold">Quiz #{quiz.quizId}</span>
+                                        {quiz.submittedAt && (
+                                          <span className="text-[10px] text-muted-foreground">
+                                            submitted {format(new Date(quiz.submittedAt), "MMM d, HH:mm")}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Right: quiz time + attempts + delay */}
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        {/* Quiz duration */}
+                                        {quiz.isSubmitted && quiz.durationMinutes !== undefined && quiz.durationMinutes !== null && (
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 border border-purple-200/60" data-testid={`badge-quiz-time-${quiz.quizId}`}>
+                                            {formatDuration(quiz.durationMinutes)} quiz time
+                                          </span>
+                                        )}
+                                        {/* Delay from lesson start */}
+                                        {quiz.gapFromLessonStartMinutes !== undefined && quiz.gapFromLessonStartMinutes !== null && (
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 border border-blue-200/60" data-testid={`badge-quiz-delay-${quiz.quizId}`}>
+                                            +{formatDuration(quiz.gapFromLessonStartMinutes)} delay
+                                          </span>
+                                        )}
+                                        {/* Attempts */}
+                                        {quiz.isSubmitted && (
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-500/10 text-orange-600 border border-orange-200/60" data-testid={`badge-attempts-${quiz.quizId}`}>
+                                            {quiz.attempts ?? 1} attempt{(quiz.attempts ?? 1) !== 1 ? 's' : ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
 
                     {/* Empty state */}
                     {course.lessons?.length === 0 && course.quizzes?.length === 0 && (
