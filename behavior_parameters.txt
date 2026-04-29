@@ -1,4 +1,4 @@
-****First Prompt to consider learning time****
+****First Prompt to consider learning time (Pace)****
 This system consider that the courses it should be done in one day, and there are 4 different behaviors consider
 1. Rushing:
   Time to finish the course: < 1 hour
@@ -11,7 +11,7 @@ This system consider that the courses it should be done in one day, and there ar
 4. Struggle/Distraction:
   Time to finish the course: >4
 
-****First Prompt to consider Engagement of the course****
+****First Prompt to consider Engagement of the course(Effort/Difficulty)****
 
 ****Next Improvements****
 Engagement signals
