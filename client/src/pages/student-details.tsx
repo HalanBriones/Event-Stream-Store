@@ -351,29 +351,32 @@ export default function StudentDetailsPage() {
                             </h4>
                           </div>
 
-                          {/* Tier tiles — the primary story of this section */}
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div className="rounded-xl p-4 text-center border bg-green-500/10 border-green-200">
-                              <div className="text-2xl font-bold text-green-600">{tierCounts.single}</div>
-                              <div className="text-[9px] font-black text-green-600 uppercase tracking-wider mt-1">Single Attempt</div>
-                              <div className="text-[9px] text-green-600/70 mt-0.5">= 1</div>
-                            </div>
-                            <div className="rounded-xl p-4 text-center border bg-orange-500/10 border-orange-200">
-                              <div className="text-2xl font-bold text-orange-600">{tierCounts.few}</div>
-                              <div className="text-[9px] font-black text-orange-600 uppercase tracking-wider mt-1">Few Retries</div>
-                              <div className="text-[9px] text-orange-600/70 mt-0.5">&gt;1 and ≤2</div>
-                            </div>
-                            <div className="rounded-xl p-4 text-center border bg-destructive/10 border-destructive/20">
-                              <div className="text-2xl font-bold text-destructive">{tierCounts.multiple}</div>
-                              <div className="text-[9px] font-black text-destructive uppercase tracking-wider mt-1">Multiple Retries</div>
-                              <div className="text-[9px] text-destructive/70 mt-0.5">&gt;2 and ≤3</div>
-                            </div>
-                            <div className="rounded-xl p-4 text-center border bg-purple-500/10 border-purple-200">
-                              <div className="text-2xl font-bold text-purple-600">{tierCounts.excessive}</div>
-                              <div className="text-[9px] font-black text-purple-600 uppercase tracking-wider mt-1">Excessive Tries</div>
-                              <div className="text-[9px] text-purple-600/70 mt-0.5">&gt;3</div>
-                            </div>
-                          </div>
+                          {/* Tier tiles — only show tiers the student actually has */}
+                          {(() => {
+                            const activeTiers = [
+                              tierCounts.single    > 0 && { count: tierCounts.single,   label: 'Single Attempt',   range: '= 1',        bg: 'bg-green-500/10',      border: 'border-green-200',       text: 'text-green-600',      sub: 'text-green-600/70'     },
+                              tierCounts.few       > 0 && { count: tierCounts.few,      label: 'Few Retries',      range: '>1 and ≤2',  bg: 'bg-orange-500/10',     border: 'border-orange-200',      text: 'text-orange-600',     sub: 'text-orange-600/70'    },
+                              tierCounts.multiple  > 0 && { count: tierCounts.multiple, label: 'Multiple Retries', range: '>2 and ≤3',  bg: 'bg-destructive/10',    border: 'border-destructive/20',  text: 'text-destructive',    sub: 'text-destructive/70'   },
+                              tierCounts.excessive > 0 && { count: tierCounts.excessive,label: 'Excessive Tries',  range: '>3',         bg: 'bg-purple-500/10',     border: 'border-purple-200',      text: 'text-purple-600',     sub: 'text-purple-600/70'    },
+                            ].filter(Boolean) as { count: number; label: string; range: string; bg: string; border: string; text: string; sub: string }[];
+
+                            const cols = activeTiers.length === 1 ? 'grid-cols-1 max-w-xs mx-auto'
+                                       : activeTiers.length === 2 ? 'grid-cols-2'
+                                       : activeTiers.length === 3 ? 'grid-cols-3'
+                                       : 'grid-cols-4';
+
+                            return (
+                              <div className={`grid gap-3 ${cols}`}>
+                                {activeTiers.map(tier => (
+                                  <div key={tier.label} className={`rounded-xl p-4 text-center border ${tier.bg} ${tier.border}`}>
+                                    <div className={`text-2xl font-bold ${tier.text}`}>{tier.count}</div>
+                                    <div className={`text-[9px] font-black ${tier.text} uppercase tracking-wider mt-1`}>{tier.label}</div>
+                                    <div className={`text-[9px] ${tier.sub} mt-0.5`}>{tier.range}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
 
                           {/* Per-quiz detail table */}
                           <div className="border border-border rounded-xl overflow-hidden">
