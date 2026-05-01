@@ -251,117 +251,137 @@ export default function StudentDetailsPage() {
                         </div>
                       </div>
 
-                      {/* ── Section 2: Course Summary ────────────────────── */}
+                      {/* ── Section 2: Course Performance (with quiz summary per course) ── */}
                       {courses.length > 0 && (
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 border-b border-muted pb-3">
                             <GraduationCap className="h-4 w-4 text-primary" />
                             <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
-                              Course Summary
+                              Course Performance
                             </h4>
                           </div>
-                          <div className="border border-border rounded-xl overflow-hidden">
-                            <div className="bg-muted/50 border-b border-border px-4 py-2 grid grid-cols-[1fr_auto_auto_auto] gap-4">
-                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Course</span>
-                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Status</span>
-                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Time</span>
-                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-right">Pace</span>
-                            </div>
-                            <div className="divide-y divide-border">
-                              {courses.map((course: any) => {
-                                const pace = getPaceStatus(course);
-                                return (
-                                  <div
-                                    key={course.courseId}
-                                    className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/20 transition-colors"
-                                    data-testid={`insights-course-row-${course.courseId}`}
-                                  >
+                          <div className="grid gap-3 md:grid-cols-2">
+                            {courses.map((course: any) => {
+                              const pace = getPaceStatus(course);
+                              const courseQuizzes = (course.lessons ?? []).flatMap((l: any) =>
+                                (l.quizzes ?? []).map((q: any) => ({ ...q, lessonId: l.lessonId }))
+                              );
+                              const cTotal = courseQuizzes.reduce((s: number, q: any) => s + (q.attempts ?? 1), 0);
+                              const cAvg   = courseQuizzes.length > 0 ? cTotal / courseQuizzes.length : 0;
+                              // Worst tier across this course's quizzes
+                              const worstN = courseQuizzes.reduce((max: number, q: any) => Math.max(max, q.attempts ?? 1), 0);
+                              const worstTier = worstN > 0 ? classifyAttempts(worstN) : null;
+
+                              return (
+                                <div
+                                  key={course.courseId}
+                                  className="border border-border rounded-xl overflow-hidden"
+                                  data-testid={`insights-course-row-${course.courseId}`}
+                                >
+                                  {/* Course header strip */}
+                                  <div className={`px-4 py-3 flex items-center justify-between border-b border-border ${course.isCompleted ? 'bg-green-500/5' : 'bg-orange-500/5'}`}>
                                     <div>
-                                      <span className="text-sm font-semibold">Course {course.courseId}</span>
+                                      <span className="text-sm font-bold">Course {course.courseId}</span>
                                       {course.enrolledAt && (
                                         <div className="text-[10px] text-muted-foreground">
                                           Enrolled {format(new Date(course.enrolledAt), "MMM d, yyyy")}
                                         </div>
                                       )}
                                     </div>
-                                    <div className="text-center">
-                                      {course.isCompleted ? (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600">
-                                          <CheckCircle2 className="h-3 w-3" /> Done
-                                        </span>
+                                    {course.isCompleted ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-500/10 px-2 py-0.5 rounded-full">
+                                        <CheckCircle2 className="h-3 w-3" /> Done
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                        <Circle className="h-3 w-3" /> Active
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* Stats grid */}
+                                  <div className="grid grid-cols-3 divide-x divide-border bg-muted/20">
+                                    <div className="px-3 py-3 text-center">
+                                      <div className="text-sm font-bold text-foreground">{formatDuration(course.durationMinutes)}</div>
+                                      <div className="text-[9px] font-black text-muted-foreground uppercase tracking-wider mt-0.5">Time</div>
+                                    </div>
+                                    <div className="px-3 py-3 text-center">
+                                      <div className={`text-sm font-bold ${pace.color}`}>{pace.status}</div>
+                                      <div className="text-[9px] font-black text-muted-foreground uppercase tracking-wider mt-0.5">Pace</div>
+                                    </div>
+                                    <div className="px-3 py-3 text-center">
+                                      {courseQuizzes.length > 0 ? (
+                                        <>
+                                          <div className={`text-sm font-bold ${worstTier?.signal ?? 'text-foreground'}`}>
+                                            {cAvg.toFixed(1)}
+                                          </div>
+                                          <div className="text-[9px] font-black text-muted-foreground uppercase tracking-wider mt-0.5">
+                                            Avg Attempts
+                                          </div>
+                                        </>
                                       ) : (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600">
-                                          <Circle className="h-3 w-3" /> Active
-                                        </span>
+                                        <>
+                                          <div className="text-sm font-bold text-muted-foreground">—</div>
+                                          <div className="text-[9px] font-black text-muted-foreground uppercase tracking-wider mt-0.5">No Quizzes</div>
+                                        </>
                                       )}
                                     </div>
-                                    <div className="text-center text-[10px] font-semibold text-muted-foreground">
-                                      {formatDuration(course.durationMinutes)}
-                                    </div>
-                                    <div className="text-right">
-                                      <span className={`text-[10px] font-bold ${pace.color}`}>{pace.status}</span>
-                                    </div>
                                   </div>
-                                );
-                              })}
-                            </div>
+                                  {/* Quiz tier summary strip — only if quizzes exist */}
+                                  {courseQuizzes.length > 0 && worstTier && (
+                                    <div className={`px-4 py-2 flex items-center gap-2 border-t border-border ${worstTier.badge.replace('text-', 'bg-').split(' ')[0]}/5`}>
+                                      <span className={`text-[10px] font-bold ${worstTier.signal}`}>
+                                        {courseQuizzes.length} quiz{courseQuizzes.length !== 1 ? 'zes' : ''} · worst: {worstTier.label}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
 
-                      {/* ── Section 3: Quiz Attempt Analysis ────────────── */}
+                      {/* ── Section 3: Quiz Attempt Analysis ────────────────────────────── */}
                       {allQuizzes.length > 0 && (
                         <div className="space-y-4" data-testid="insights-quiz-attempts">
                           <div className="flex items-center gap-2 border-b border-muted pb-3">
                             <RotateCcw className="h-4 w-4 text-orange-500" />
                             <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
-                              Quiz Attempt Analysis
+                              Quiz Attempt Distribution
                             </h4>
                           </div>
 
-                          {/* Total + avg */}
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
-                              <div className="text-2xl font-bold text-foreground">{totalAttempts}</div>
-                              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">Total Attempts</div>
-                            </div>
-                            <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
-                              <div className="text-2xl font-bold text-foreground">{avgAttempts.toFixed(1)}</div>
-                              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">Avg per Quiz</div>
-                            </div>
-                          </div>
-
-                          {/* Tier tiles */}
+                          {/* Tier tiles — the primary story of this section */}
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div className="rounded-xl p-3 text-center border bg-green-500/10 border-green-200">
-                              <div className="text-xl font-bold text-green-600">{tierCounts.single}</div>
+                            <div className="rounded-xl p-4 text-center border bg-green-500/10 border-green-200">
+                              <div className="text-2xl font-bold text-green-600">{tierCounts.single}</div>
                               <div className="text-[9px] font-black text-green-600 uppercase tracking-wider mt-1">Single Attempt</div>
                               <div className="text-[9px] text-green-600/70 mt-0.5">= 1</div>
                             </div>
-                            <div className="rounded-xl p-3 text-center border bg-orange-500/10 border-orange-200">
-                              <div className="text-xl font-bold text-orange-600">{tierCounts.few}</div>
+                            <div className="rounded-xl p-4 text-center border bg-orange-500/10 border-orange-200">
+                              <div className="text-2xl font-bold text-orange-600">{tierCounts.few}</div>
                               <div className="text-[9px] font-black text-orange-600 uppercase tracking-wider mt-1">Few Retries</div>
                               <div className="text-[9px] text-orange-600/70 mt-0.5">&gt;1 and ≤2</div>
                             </div>
-                            <div className="rounded-xl p-3 text-center border bg-destructive/10 border-destructive/20">
-                              <div className="text-xl font-bold text-destructive">{tierCounts.multiple}</div>
+                            <div className="rounded-xl p-4 text-center border bg-destructive/10 border-destructive/20">
+                              <div className="text-2xl font-bold text-destructive">{tierCounts.multiple}</div>
                               <div className="text-[9px] font-black text-destructive uppercase tracking-wider mt-1">Multiple Retries</div>
                               <div className="text-[9px] text-destructive/70 mt-0.5">&gt;2 and ≤3</div>
                             </div>
-                            <div className="rounded-xl p-3 text-center border bg-purple-500/10 border-purple-200">
-                              <div className="text-xl font-bold text-purple-600">{tierCounts.excessive}</div>
+                            <div className="rounded-xl p-4 text-center border bg-purple-500/10 border-purple-200">
+                              <div className="text-2xl font-bold text-purple-600">{tierCounts.excessive}</div>
                               <div className="text-[9px] font-black text-purple-600 uppercase tracking-wider mt-1">Excessive Tries</div>
                               <div className="text-[9px] text-purple-600/70 mt-0.5">&gt;3</div>
                             </div>
                           </div>
 
-                          {/* Per-quiz table */}
+                          {/* Per-quiz detail table */}
                           <div className="border border-border rounded-xl overflow-hidden">
-                            <div className="bg-muted/50 border-b border-border px-4 py-2 grid grid-cols-[1fr_auto_auto_auto] gap-4">
-                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Quiz</span>
-                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Course</span>
+                            <div className="bg-muted/50 border-b border-border px-4 py-2 grid grid-cols-[auto_1fr_auto_auto] gap-3">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Course</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Quiz · Lesson</span>
                               <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Attempts</span>
-                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-right">Classification</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-right">Tier</span>
                             </div>
                             <div className="divide-y divide-border">
                               {allQuizzes.map((q: any) => {
@@ -370,15 +390,15 @@ export default function StudentDetailsPage() {
                                 return (
                                   <div
                                     key={`${q.courseId}-${q.lessonId}-${q.quizId}`}
-                                    className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/20 transition-colors"
+                                    className="grid grid-cols-[auto_1fr_auto_auto] gap-3 items-center px-4 py-3 hover:bg-muted/20 transition-colors"
                                     data-testid={`insights-quiz-row-${q.quizId}`}
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs font-semibold">Quiz #{q.quizId}</span>
-                                      <span className="text-[10px] text-muted-foreground">Lesson {q.lessonId}</span>
-                                    </div>
-                                    <div className="text-center text-[10px] font-semibold text-muted-foreground">
+                                    <div className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
                                       {q.courseId}
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-semibold">Quiz #{q.quizId}</span>
+                                      <span className="text-[10px] text-muted-foreground">· Lesson {q.lessonId}</span>
                                     </div>
                                     <div className="text-center">
                                       <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full ${tier.badge}`}>
