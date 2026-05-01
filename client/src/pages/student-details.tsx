@@ -140,212 +140,271 @@ export default function StudentDetailsPage() {
                   </DialogHeader>
                 </div>
 
-                <div className="p-6 space-y-12">
-                  {stats?.courses?.map((course: any) => (
-                    <div key={course.courseId} className="space-y-6">
+                {/* ── Student-level insights ───────────────────────────────── */}
+                {(() => {
+                  const courses = stats?.courses ?? [];
 
-                      {/* Course heading row */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-muted pb-4">
-                        <div>
-                          <h3 className="font-bold text-2xl text-primary">Course {course.courseId}</h3>
-                          <p className="text-sm text-muted-foreground italic">Comprehensive timeline breakdown</p>
+                  // ── Aggregate student-level numbers ──────────────────────
+                  const totalTime      = courses.reduce((s: number, c: any) => s + (c.durationMinutes ?? 0), 0);
+                  const totalActiveDays = courses.reduce((s: number, c: any) => s + (c.activeDays ?? 0), 0);
+                  const completionRate = courses.length > 0
+                    ? Math.round(((stats?.completedCourses ?? 0) / courses.length) * 100)
+                    : 0;
+
+                  // Flatten all quizzes across every course + lesson
+                  const allQuizzes: any[] = courses.flatMap((c: any) =>
+                    (c.lessons ?? []).flatMap((l: any) =>
+                      (l.quizzes ?? []).map((q: any) => ({ ...q, lessonId: l.lessonId, courseId: c.courseId }))
+                    )
+                  );
+
+                  const totalAttempts  = allQuizzes.reduce((s: number, q: any) => s + (q.attempts ?? 1), 0);
+                  const avgAttempts    = allQuizzes.length > 0 ? totalAttempts / allQuizzes.length : 0;
+
+                  // Tier classifier
+                  const classifyAttempts = (n: number) => {
+                    if (n <= 1) return { label: 'Single Attempt',   badge: 'bg-green-500/10 text-green-600',        signal: 'text-green-600',   icon: 'check' } as const;
+                    if (n <= 2) return { label: 'Few Retries',      badge: 'bg-orange-500/10 text-orange-600',      signal: 'text-orange-600',  icon: 'warn'  } as const;
+                    if (n <= 3) return { label: 'Multiple Retries', badge: 'bg-destructive/10 text-destructive',    signal: 'text-destructive', icon: 'warn'  } as const;
+                    return      { label: 'Excessive Tries',         badge: 'bg-purple-500/10 text-purple-600',      signal: 'text-purple-600',  icon: 'warn'  } as const;
+                  };
+
+                  const tierCounts = { single: 0, few: 0, multiple: 0, excessive: 0 };
+                  allQuizzes.forEach((q: any) => {
+                    const n = q.attempts ?? 1;
+                    if (n <= 1)      tierCounts.single++;
+                    else if (n <= 2) tierCounts.few++;
+                    else if (n <= 3) tierCounts.multiple++;
+                    else             tierCounts.excessive++;
+                  });
+
+                  return (
+                    <div className="p-6 space-y-10">
+
+                      {/* ── Section 1: Student at a Glance ──────────────── */}
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 border-b border-muted pb-3">
+                          <Activity className="h-4 w-4 text-primary" />
+                          <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                            Student at a Glance
+                          </h4>
                         </div>
-                        <div className="flex items-center gap-2 bg-muted/50 px-4 py-2 rounded-full text-sm font-semibold">
-                          <Clock className="h-4 w-4 text-primary" />
-                          <span>Investment: {formatDuration(course.durationMinutes)}</span>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="insights-stat-cards">
+                          {/* Total Time */}
+                          <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                            <CardContent className="pt-6 text-center">
+                              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                                <Clock className="h-5 w-5 text-primary" />
+                              </div>
+                              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                                Total Time
+                              </div>
+                              <div className="text-2xl font-bold text-foreground">{formatDuration(totalTime)}</div>
+                            </CardContent>
+                          </Card>
+
+                          {/* Active Days */}
+                          <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                            <CardContent className="pt-6 text-center">
+                              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
+                                <BookOpen className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                                Active Days
+                              </div>
+                              <div className="text-2xl font-bold text-foreground">{totalActiveDays}</div>
+                            </CardContent>
+                          </Card>
+
+                          {/* Completion Rate */}
+                          <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                            <CardContent className="pt-6 text-center">
+                              <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                              </div>
+                              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                                Completion
+                              </div>
+                              <div className="text-2xl font-bold text-foreground">{completionRate}%</div>
+                              <div className="text-[9px] text-muted-foreground mt-0.5">
+                                {stats?.completedCourses ?? 0} of {courses.length} courses
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          {/* Quiz Avg */}
+                          <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
+                            <CardContent className="pt-6 text-center">
+                              <div className="h-10 w-10 rounded-lg bg-orange-500/10 flex items-center justify-center mx-auto mb-3">
+                                <RotateCcw className="h-5 w-5 text-orange-500" />
+                              </div>
+                              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                                Avg Attempts
+                              </div>
+                              <div className="text-2xl font-bold text-foreground">
+                                {allQuizzes.length > 0 ? avgAttempts.toFixed(1) : '—'}
+                              </div>
+                              <div className="text-[9px] text-muted-foreground mt-0.5">per quiz</div>
+                            </CardContent>
+                          </Card>
                         </div>
                       </div>
 
-                      {/* Four mini stat cards: Active Days / First Engagement / Status / Pace */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="insights-stat-cards">
-                        <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
-                          <CardContent className="pt-6 text-center">
-                            <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
-                              <BookOpen className="h-5 w-5 text-blue-600" />
+                      {/* ── Section 2: Course Summary ────────────────────── */}
+                      {courses.length > 0 && (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 border-b border-muted pb-3">
+                            <GraduationCap className="h-4 w-4 text-primary" />
+                            <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                              Course Summary
+                            </h4>
+                          </div>
+                          <div className="border border-border rounded-xl overflow-hidden">
+                            <div className="bg-muted/50 border-b border-border px-4 py-2 grid grid-cols-[1fr_auto_auto_auto] gap-4">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Course</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Status</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Time</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-right">Pace</span>
                             </div>
-                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                              Active Days
-                            </div>
-                            <div className="text-2xl font-bold text-foreground">{course.activeDays || 0}</div>
-                          </CardContent>
-                        </Card>
-
-                        <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
-                          <CardContent className="pt-6 text-center">
-                            <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
-                              <Clock className="h-5 w-5 text-purple-600" />
-                            </div>
-                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                              First Engagement
-                            </div>
-                            {/* Time between enrollment and first lesson start */}
-                            <div className="text-2xl font-bold text-foreground">
-                              {formatDuration(course.gapEnrollmentToFirstLessonMinutes)}
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
-                          <CardContent className="pt-6 text-center">
-                            <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center mx-auto mb-3">
-                              <CheckCircle2 className="h-5 w-5 text-green-600" />
-                            </div>
-                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                              Status
-                            </div>
-                            <div className="text-2xl font-bold text-foreground capitalize">
-                              {course.isCompleted ? "Done" : "Active"}
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Pace card — colour-coded by classification */}
-                        {(() => {
-                          const pace = getPaceStatus(course);
-                          return (
-                            <Card className={`border-none ${pace.bg} shadow-sm hover:shadow-md transition-all`}>
-                              <CardContent className="pt-6 text-center">
-                                <div className={`h-10 w-10 rounded-lg ${pace.bg.replace('/10', '/20')} flex items-center justify-center mx-auto mb-3`}>
-                                  <Activity className={`h-5 w-5 ${pace.color}`} />
-                                </div>
-                                <div className={`text-[10px] font-bold ${pace.color} uppercase tracking-wider mb-1`}>
-                                  Pace: {pace.status}
-                                </div>
-                                <div className={`text-2xl font-bold ${pace.color}`}>{pace.level}</div>
-                                {pace.reason && (
-                                  <div className={`text-[8px] ${pace.color} opacity-70 mt-1 truncate px-2`}>
-                                    {pace.reason}
-                                  </div>
-                                )}
-                              </CardContent>
-                            </Card>
-                          );
-                        })()}
-                      </div>
-
-                      {/* ── Quiz Attempts section ───────────────────────── */}
-                      {(() => {
-                        const allQuizzes = course.lessons?.flatMap((l: any) =>
-                          (l.quizzes ?? []).map((q: any) => ({ ...q, lessonId: l.lessonId }))
-                        ) ?? [];
-                        if (allQuizzes.length === 0) return null;
-
-                        // ── Attempt tier classifier ─────────────────────
-                        // 1 → Single Attempt
-                        // >1 and <=2 → Few Retries
-                        // >2 and <=3 → Multiple Retries
-                        // >3 → Excessive Tries
-                        const classifyAttempts = (n: number) => {
-                          if (n <= 1)  return { label: 'Single Attempt',   badge: 'bg-green-500/10 text-green-600',   signal: 'text-green-600',   icon: 'check' } as const;
-                          if (n <= 2)  return { label: 'Few Retries',      badge: 'bg-orange-500/10 text-orange-600', signal: 'text-orange-600',  icon: 'warn'  } as const;
-                          if (n <= 3)  return { label: 'Multiple Retries', badge: 'bg-destructive/10 text-destructive', signal: 'text-destructive', icon: 'warn' } as const;
-                          return       { label: 'Excessive Tries',         badge: 'bg-purple-500/10 text-purple-600', signal: 'text-purple-600',  icon: 'warn'  } as const;
-                        };
-
-                        const totalAttempts = allQuizzes.reduce((s: number, q: any) => s + (q.attempts ?? 1), 0);
-                        const avgAttempts   = totalAttempts / allQuizzes.length;
-                        const tierCounts    = { single: 0, few: 0, multiple: 0, excessive: 0 };
-                        allQuizzes.forEach((q: any) => {
-                          const n = q.attempts ?? 1;
-                          if (n <= 1)      tierCounts.single++;
-                          else if (n <= 2) tierCounts.few++;
-                          else if (n <= 3) tierCounts.multiple++;
-                          else             tierCounts.excessive++;
-                        });
-
-                        return (
-                          <div className="space-y-4" data-testid="insights-quiz-attempts">
-                            {/* Section header */}
-                            <div className="flex items-center gap-2">
-                              <RotateCcw className="h-4 w-4 text-orange-500" />
-                              <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
-                                Quiz Attempt Analysis
-                              </h4>
-                            </div>
-
-                            {/* Top summary: total + avg */}
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
-                                <div className="text-2xl font-bold text-foreground">{totalAttempts}</div>
-                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">Total Attempts</div>
-                              </div>
-                              <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
-                                <div className="text-2xl font-bold text-foreground">{avgAttempts.toFixed(1)}</div>
-                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">Avg per Quiz</div>
-                              </div>
-                            </div>
-
-                            {/* Tier breakdown — 4 tiles */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                              <div className="rounded-xl p-3 text-center border bg-green-500/10 border-green-200">
-                                <div className="text-xl font-bold text-green-600">{tierCounts.single}</div>
-                                <div className="text-[9px] font-black text-green-600 uppercase tracking-wider mt-1">Single Attempt</div>
-                                <div className="text-[9px] text-green-600/70 mt-0.5">= 1</div>
-                              </div>
-                              <div className="rounded-xl p-3 text-center border bg-orange-500/10 border-orange-200">
-                                <div className="text-xl font-bold text-orange-600">{tierCounts.few}</div>
-                                <div className="text-[9px] font-black text-orange-600 uppercase tracking-wider mt-1">Few Retries</div>
-                                <div className="text-[9px] text-orange-600/70 mt-0.5">&gt;1 and ≤2</div>
-                              </div>
-                              <div className="rounded-xl p-3 text-center border bg-destructive/10 border-destructive/20">
-                                <div className="text-xl font-bold text-destructive">{tierCounts.multiple}</div>
-                                <div className="text-[9px] font-black text-destructive uppercase tracking-wider mt-1">Multiple Retries</div>
-                                <div className="text-[9px] text-destructive/70 mt-0.5">&gt;2 and ≤3</div>
-                              </div>
-                              <div className="rounded-xl p-3 text-center border bg-purple-500/10 border-purple-200">
-                                <div className="text-xl font-bold text-purple-600">{tierCounts.excessive}</div>
-                                <div className="text-[9px] font-black text-purple-600 uppercase tracking-wider mt-1">Excessive Tries</div>
-                                <div className="text-[9px] text-purple-600/70 mt-0.5">&gt;3</div>
-                              </div>
-                            </div>
-
-                            {/* Per-quiz breakdown */}
-                            <div className="border border-border rounded-xl overflow-hidden">
-                              <div className="bg-muted/50 border-b border-border px-4 py-2 grid grid-cols-[1fr_auto_auto] gap-4">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Quiz</span>
-                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Attempts</span>
-                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-right">Classification</span>
-                              </div>
-                              <div className="divide-y divide-border">
-                                {allQuizzes.map((q: any) => {
-                                  const attempts = q.attempts ?? 1;
-                                  const tier     = classifyAttempts(attempts);
-                                  return (
-                                    <div
-                                      key={`${q.lessonId}-${q.quizId}`}
-                                      className="grid grid-cols-[1fr_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/20 transition-colors"
-                                      data-testid={`insights-quiz-row-${q.quizId}`}
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs font-semibold">Quiz #{q.quizId}</span>
-                                        <span className="text-[10px] text-muted-foreground">Lesson {q.lessonId}</span>
-                                      </div>
-                                      <div className="text-center">
-                                        <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full ${tier.badge}`}>
-                                          {attempts}
-                                        </span>
-                                      </div>
-                                      <div className="text-right">
-                                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${tier.signal}`}>
-                                          {tier.icon === 'check'
-                                            ? <CheckCircle2 className="h-3 w-3" />
-                                            : <AlertTriangle className="h-3 w-3" />
-                                          }
-                                          {tier.label}
-                                        </span>
-                                      </div>
+                            <div className="divide-y divide-border">
+                              {courses.map((course: any) => {
+                                const pace = getPaceStatus(course);
+                                return (
+                                  <div
+                                    key={course.courseId}
+                                    className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/20 transition-colors"
+                                    data-testid={`insights-course-row-${course.courseId}`}
+                                  >
+                                    <div>
+                                      <span className="text-sm font-semibold">Course {course.courseId}</span>
+                                      {course.enrolledAt && (
+                                        <div className="text-[10px] text-muted-foreground">
+                                          Enrolled {format(new Date(course.enrolledAt), "MMM d, yyyy")}
+                                        </div>
+                                      )}
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                    <div className="text-center">
+                                      {course.isCompleted ? (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600">
+                                          <CheckCircle2 className="h-3 w-3" /> Done
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600">
+                                          <Circle className="h-3 w-3" /> Active
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-center text-[10px] font-semibold text-muted-foreground">
+                                      {formatDuration(course.durationMinutes)}
+                                    </div>
+                                    <div className="text-right">
+                                      <span className={`text-[10px] font-bold ${pace.color}`}>{pace.status}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        );
-                      })()}
+                        </div>
+                      )}
+
+                      {/* ── Section 3: Quiz Attempt Analysis ────────────── */}
+                      {allQuizzes.length > 0 && (
+                        <div className="space-y-4" data-testid="insights-quiz-attempts">
+                          <div className="flex items-center gap-2 border-b border-muted pb-3">
+                            <RotateCcw className="h-4 w-4 text-orange-500" />
+                            <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                              Quiz Attempt Analysis
+                            </h4>
+                          </div>
+
+                          {/* Total + avg */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
+                              <div className="text-2xl font-bold text-foreground">{totalAttempts}</div>
+                              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">Total Attempts</div>
+                            </div>
+                            <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
+                              <div className="text-2xl font-bold text-foreground">{avgAttempts.toFixed(1)}</div>
+                              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">Avg per Quiz</div>
+                            </div>
+                          </div>
+
+                          {/* Tier tiles */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="rounded-xl p-3 text-center border bg-green-500/10 border-green-200">
+                              <div className="text-xl font-bold text-green-600">{tierCounts.single}</div>
+                              <div className="text-[9px] font-black text-green-600 uppercase tracking-wider mt-1">Single Attempt</div>
+                              <div className="text-[9px] text-green-600/70 mt-0.5">= 1</div>
+                            </div>
+                            <div className="rounded-xl p-3 text-center border bg-orange-500/10 border-orange-200">
+                              <div className="text-xl font-bold text-orange-600">{tierCounts.few}</div>
+                              <div className="text-[9px] font-black text-orange-600 uppercase tracking-wider mt-1">Few Retries</div>
+                              <div className="text-[9px] text-orange-600/70 mt-0.5">&gt;1 and ≤2</div>
+                            </div>
+                            <div className="rounded-xl p-3 text-center border bg-destructive/10 border-destructive/20">
+                              <div className="text-xl font-bold text-destructive">{tierCounts.multiple}</div>
+                              <div className="text-[9px] font-black text-destructive uppercase tracking-wider mt-1">Multiple Retries</div>
+                              <div className="text-[9px] text-destructive/70 mt-0.5">&gt;2 and ≤3</div>
+                            </div>
+                            <div className="rounded-xl p-3 text-center border bg-purple-500/10 border-purple-200">
+                              <div className="text-xl font-bold text-purple-600">{tierCounts.excessive}</div>
+                              <div className="text-[9px] font-black text-purple-600 uppercase tracking-wider mt-1">Excessive Tries</div>
+                              <div className="text-[9px] text-purple-600/70 mt-0.5">&gt;3</div>
+                            </div>
+                          </div>
+
+                          {/* Per-quiz table */}
+                          <div className="border border-border rounded-xl overflow-hidden">
+                            <div className="bg-muted/50 border-b border-border px-4 py-2 grid grid-cols-[1fr_auto_auto_auto] gap-4">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Quiz</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Course</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Attempts</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-right">Classification</span>
+                            </div>
+                            <div className="divide-y divide-border">
+                              {allQuizzes.map((q: any) => {
+                                const attempts = q.attempts ?? 1;
+                                const tier     = classifyAttempts(attempts);
+                                return (
+                                  <div
+                                    key={`${q.courseId}-${q.lessonId}-${q.quizId}`}
+                                    className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/20 transition-colors"
+                                    data-testid={`insights-quiz-row-${q.quizId}`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-semibold">Quiz #{q.quizId}</span>
+                                      <span className="text-[10px] text-muted-foreground">Lesson {q.lessonId}</span>
+                                    </div>
+                                    <div className="text-center text-[10px] font-semibold text-muted-foreground">
+                                      {q.courseId}
+                                    </div>
+                                    <div className="text-center">
+                                      <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full ${tier.badge}`}>
+                                        {attempts}
+                                      </span>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${tier.signal}`}>
+                                        {tier.icon === 'check'
+                                          ? <CheckCircle2 className="h-3 w-3" />
+                                          : <AlertTriangle className="h-3 w-3" />
+                                        }
+                                        {tier.label}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
               </DialogContent>
             </Dialog>
           </div>
