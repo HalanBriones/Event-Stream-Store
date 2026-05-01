@@ -260,7 +260,7 @@ export default function StudentDetailsPage() {
                               Course Performance
                             </h4>
                           </div>
-                          <div className="grid gap-3 md:grid-cols-2">
+                          <div className="grid gap-3">
                             {courses.map((course: any) => {
                               const pace = getPaceStatus(course);
                               const courseQuizzes = (course.lessons ?? []).flatMap((l: any) =>
