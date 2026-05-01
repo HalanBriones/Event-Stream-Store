@@ -230,10 +230,28 @@ export default function StudentDetailsPage() {
                         ) ?? [];
                         if (allQuizzes.length === 0) return null;
 
-                        const totalAttempts  = allQuizzes.reduce((s: number, q: any) => s + (q.attempts ?? 1), 0);
-                        const avgAttempts    = totalAttempts / allQuizzes.length;
-                        const multiAttempts  = allQuizzes.filter((q: any) => (q.attempts ?? 1) > 1).length;
-                        const flagged        = multiAttempts > 0;
+                        // ── Attempt tier classifier ─────────────────────
+                        // 1 → Single Attempt
+                        // >1 and <=2 → Few Retries
+                        // >2 and <=3 → Multiple Retries
+                        // >3 → Excessive Tries
+                        const classifyAttempts = (n: number) => {
+                          if (n <= 1)  return { label: 'Single Attempt',   badge: 'bg-green-500/10 text-green-600',   signal: 'text-green-600',   icon: 'check' } as const;
+                          if (n <= 2)  return { label: 'Few Retries',      badge: 'bg-orange-500/10 text-orange-600', signal: 'text-orange-600',  icon: 'warn'  } as const;
+                          if (n <= 3)  return { label: 'Multiple Retries', badge: 'bg-destructive/10 text-destructive', signal: 'text-destructive', icon: 'warn' } as const;
+                          return       { label: 'Excessive Tries',         badge: 'bg-purple-500/10 text-purple-600', signal: 'text-purple-600',  icon: 'warn'  } as const;
+                        };
+
+                        const totalAttempts = allQuizzes.reduce((s: number, q: any) => s + (q.attempts ?? 1), 0);
+                        const avgAttempts   = totalAttempts / allQuizzes.length;
+                        const tierCounts    = { single: 0, few: 0, multiple: 0, excessive: 0 };
+                        allQuizzes.forEach((q: any) => {
+                          const n = q.attempts ?? 1;
+                          if (n <= 1)      tierCounts.single++;
+                          else if (n <= 2) tierCounts.few++;
+                          else if (n <= 3) tierCounts.multiple++;
+                          else             tierCounts.excessive++;
+                        });
 
                         return (
                           <div className="space-y-4" data-testid="insights-quiz-attempts">
@@ -245,27 +263,39 @@ export default function StudentDetailsPage() {
                               </h4>
                             </div>
 
-                            {/* Summary row */}
-                            <div className="grid grid-cols-3 gap-3">
+                            {/* Top summary: total + avg */}
+                            <div className="grid grid-cols-2 gap-3">
                               <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
                                 <div className="text-2xl font-bold text-foreground">{totalAttempts}</div>
-                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">
-                                  Total Attempts
-                                </div>
+                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">Total Attempts</div>
                               </div>
                               <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
                                 <div className="text-2xl font-bold text-foreground">{avgAttempts.toFixed(1)}</div>
-                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">
-                                  Avg per Quiz
-                                </div>
+                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">Avg per Quiz</div>
                               </div>
-                              <div className={`rounded-xl p-4 text-center border ${flagged ? 'bg-orange-500/10 border-orange-200' : 'bg-green-500/10 border-green-200'}`}>
-                                <div className={`text-2xl font-bold ${flagged ? 'text-orange-600' : 'text-green-600'}`}>
-                                  {multiAttempts}
-                                </div>
-                                <div className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${flagged ? 'text-orange-600' : 'text-green-600'}`}>
-                                  Retried Quizzes
-                                </div>
+                            </div>
+
+                            {/* Tier breakdown — 4 tiles */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              <div className="rounded-xl p-3 text-center border bg-green-500/10 border-green-200">
+                                <div className="text-xl font-bold text-green-600">{tierCounts.single}</div>
+                                <div className="text-[9px] font-black text-green-600 uppercase tracking-wider mt-1">Single Attempt</div>
+                                <div className="text-[9px] text-green-600/70 mt-0.5">= 1</div>
+                              </div>
+                              <div className="rounded-xl p-3 text-center border bg-orange-500/10 border-orange-200">
+                                <div className="text-xl font-bold text-orange-600">{tierCounts.few}</div>
+                                <div className="text-[9px] font-black text-orange-600 uppercase tracking-wider mt-1">Few Retries</div>
+                                <div className="text-[9px] text-orange-600/70 mt-0.5">&gt;1 and ≤2</div>
+                              </div>
+                              <div className="rounded-xl p-3 text-center border bg-destructive/10 border-destructive/20">
+                                <div className="text-xl font-bold text-destructive">{tierCounts.multiple}</div>
+                                <div className="text-[9px] font-black text-destructive uppercase tracking-wider mt-1">Multiple Retries</div>
+                                <div className="text-[9px] text-destructive/70 mt-0.5">&gt;2 and ≤3</div>
+                              </div>
+                              <div className="rounded-xl p-3 text-center border bg-purple-500/10 border-purple-200">
+                                <div className="text-xl font-bold text-purple-600">{tierCounts.excessive}</div>
+                                <div className="text-[9px] font-black text-purple-600 uppercase tracking-wider mt-1">Excessive Tries</div>
+                                <div className="text-[9px] text-purple-600/70 mt-0.5">&gt;3</div>
                               </div>
                             </div>
 
@@ -274,12 +304,12 @@ export default function StudentDetailsPage() {
                               <div className="bg-muted/50 border-b border-border px-4 py-2 grid grid-cols-[1fr_auto_auto] gap-4">
                                 <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Quiz</span>
                                 <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Attempts</span>
-                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-right">Signal</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-right">Classification</span>
                               </div>
                               <div className="divide-y divide-border">
                                 {allQuizzes.map((q: any) => {
                                   const attempts = q.attempts ?? 1;
-                                  const isFlag   = attempts > 1;
+                                  const tier     = classifyAttempts(attempts);
                                   return (
                                     <div
                                       key={`${q.lessonId}-${q.quizId}`}
@@ -288,33 +318,21 @@ export default function StudentDetailsPage() {
                                     >
                                       <div className="flex items-center gap-2">
                                         <span className="text-xs font-semibold">Quiz #{q.quizId}</span>
-                                        <span className="text-[10px] text-muted-foreground">
-                                          Lesson {q.lessonId}
-                                        </span>
+                                        <span className="text-[10px] text-muted-foreground">Lesson {q.lessonId}</span>
                                       </div>
                                       <div className="text-center">
-                                        <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full ${
-                                          attempts === 1
-                                            ? 'bg-green-500/10 text-green-600'
-                                            : attempts === 2
-                                            ? 'bg-orange-500/10 text-orange-600'
-                                            : 'bg-destructive/10 text-destructive'
-                                        }`}>
+                                        <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full ${tier.badge}`}>
                                           {attempts}
                                         </span>
                                       </div>
                                       <div className="text-right">
-                                        {isFlag ? (
-                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600">
-                                            <AlertTriangle className="h-3 w-3" />
-                                            Retried
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600">
-                                            <CheckCircle2 className="h-3 w-3" />
-                                            First try
-                                          </span>
-                                        )}
+                                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${tier.signal}`}>
+                                          {tier.icon === 'check'
+                                            ? <CheckCircle2 className="h-3 w-3" />
+                                            : <AlertTriangle className="h-3 w-3" />
+                                          }
+                                          {tier.label}
+                                        </span>
                                       </div>
                                     </div>
                                   );
