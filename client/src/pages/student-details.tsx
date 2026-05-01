@@ -23,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { BookOpen, CheckCircle2, Circle, Clock, GraduationCap, Lightbulb, Activity } from "lucide-react";
+import { BookOpen, CheckCircle2, Circle, Clock, GraduationCap, Lightbulb, Activity, RotateCcw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -157,7 +157,7 @@ export default function StudentDetailsPage() {
                       </div>
 
                       {/* Four mini stat cards: Active Days / First Engagement / Status / Pace */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="insights-stat-cards">
                         <Card className="border-none bg-background shadow-sm hover:shadow-md transition-all">
                           <CardContent className="pt-6 text-center">
                             <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
@@ -222,6 +222,108 @@ export default function StudentDetailsPage() {
                           );
                         })()}
                       </div>
+
+                      {/* ── Quiz Attempts section ───────────────────────── */}
+                      {(() => {
+                        const allQuizzes = course.lessons?.flatMap((l: any) =>
+                          (l.quizzes ?? []).map((q: any) => ({ ...q, lessonId: l.lessonId }))
+                        ) ?? [];
+                        if (allQuizzes.length === 0) return null;
+
+                        const totalAttempts  = allQuizzes.reduce((s: number, q: any) => s + (q.attempts ?? 1), 0);
+                        const avgAttempts    = totalAttempts / allQuizzes.length;
+                        const multiAttempts  = allQuizzes.filter((q: any) => (q.attempts ?? 1) > 1).length;
+                        const flagged        = multiAttempts > 0;
+
+                        return (
+                          <div className="space-y-4" data-testid="insights-quiz-attempts">
+                            {/* Section header */}
+                            <div className="flex items-center gap-2">
+                              <RotateCcw className="h-4 w-4 text-orange-500" />
+                              <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                                Quiz Attempt Analysis
+                              </h4>
+                            </div>
+
+                            {/* Summary row */}
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
+                                <div className="text-2xl font-bold text-foreground">{totalAttempts}</div>
+                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">
+                                  Total Attempts
+                                </div>
+                              </div>
+                              <div className="bg-muted/40 rounded-xl p-4 text-center border border-border">
+                                <div className="text-2xl font-bold text-foreground">{avgAttempts.toFixed(1)}</div>
+                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-1">
+                                  Avg per Quiz
+                                </div>
+                              </div>
+                              <div className={`rounded-xl p-4 text-center border ${flagged ? 'bg-orange-500/10 border-orange-200' : 'bg-green-500/10 border-green-200'}`}>
+                                <div className={`text-2xl font-bold ${flagged ? 'text-orange-600' : 'text-green-600'}`}>
+                                  {multiAttempts}
+                                </div>
+                                <div className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${flagged ? 'text-orange-600' : 'text-green-600'}`}>
+                                  Retried Quizzes
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Per-quiz breakdown */}
+                            <div className="border border-border rounded-xl overflow-hidden">
+                              <div className="bg-muted/50 border-b border-border px-4 py-2 grid grid-cols-[1fr_auto_auto] gap-4">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Quiz</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-center">Attempts</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground text-right">Signal</span>
+                              </div>
+                              <div className="divide-y divide-border">
+                                {allQuizzes.map((q: any) => {
+                                  const attempts = q.attempts ?? 1;
+                                  const isFlag   = attempts > 1;
+                                  return (
+                                    <div
+                                      key={`${q.lessonId}-${q.quizId}`}
+                                      className="grid grid-cols-[1fr_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/20 transition-colors"
+                                      data-testid={`insights-quiz-row-${q.quizId}`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-semibold">Quiz #{q.quizId}</span>
+                                        <span className="text-[10px] text-muted-foreground">
+                                          Lesson {q.lessonId}
+                                        </span>
+                                      </div>
+                                      <div className="text-center">
+                                        <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full ${
+                                          attempts === 1
+                                            ? 'bg-green-500/10 text-green-600'
+                                            : attempts === 2
+                                            ? 'bg-orange-500/10 text-orange-600'
+                                            : 'bg-destructive/10 text-destructive'
+                                        }`}>
+                                          {attempts}
+                                        </span>
+                                      </div>
+                                      <div className="text-right">
+                                        {isFlag ? (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600">
+                                            <AlertTriangle className="h-3 w-3" />
+                                            Retried
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            First try
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                     </div>
                   ))}

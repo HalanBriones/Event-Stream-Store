@@ -11,7 +11,11 @@ This system consider that the courses it should be done in one day, and there ar
 4. Struggle/Distraction:
   Time to finish the course: >4
 
-****First Prompt to consider Engagement of the course(Effort/Difficulty)****
+****First Prompt to consider Quiz attempts in the Insights****
+1. Single Attempt: 1 attempt per lesson
+2. Few Retries: >1 and <=2 per lesson
+3. Multiple Retries: >2 and <=3 per lesson
+4. Excesive tries: >3
 
 ****Next Improvements****
 Engagement signals
